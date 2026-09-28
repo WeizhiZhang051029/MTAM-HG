@@ -29,7 +29,7 @@ from protocol_integrity import (
 )
 
 
-def run_tabdiff_train(dry_run: bool = False) -> dict[str, object]:
+def run_tabdiff_train() -> dict[str, object]:
     repo = require_tabdiff_repo()
     ds_name = dataname()
     process_cmd = process_command(repo, ds_name)
@@ -66,8 +66,6 @@ def run_tabdiff_train(dry_run: bool = False) -> dict[str, object]:
             "training steps are controlled by third_party/TabDiff/tabdiff/configs/tabdiff_configs.toml."
         ),
     }
-    if dry_run:
-        return result
     if not deps_ok:
         raise RuntimeError(deps_message)
     metadata_path = project_path(getattr(config, "TABDIFF_DATA_DIR", "data/tabdiff")) / "capl_metadata.json"
@@ -107,21 +105,14 @@ def run_tabdiff_train(dry_run: bool = False) -> dict[str, object]:
     return result
 
 
-def _str_to_bool(value: str | bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    return str(value).lower() in {"1", "true", "yes", "y"}
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run official TabDiff training.")
-    parser.add_argument("--dry_run", type=_str_to_bool, nargs="?", const=True, default=False)
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    result = run_tabdiff_train(dry_run=args.dry_run)
+    result = run_tabdiff_train()
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 

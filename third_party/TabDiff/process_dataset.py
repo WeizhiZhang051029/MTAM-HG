@@ -487,22 +487,10 @@ def process_data(name):
     val_df.rename(columns = idx_name_mapping, inplace=True)
 
     for col in num_columns:
-        if (train_df[col] == ' ?').sum() > 0:
-            print(col)
-            import pdb; pdb.set_trace()
-        if (train_df[col] == '?').sum() > 0:
-            print(col)
-            import pdb; pdb.set_trace()
         train_df.loc[train_df[col] == '?', col] = np.nan
     for col in cat_columns:
         train_df.loc[train_df[col] == '?', col] = 'nan'
     for col in num_columns:
-        if (test_df[col] == ' ?').sum() > 0:
-            print(col)
-            import pdb; pdb.set_trace()
-        if (test_df[col] == '?').sum() > 0:
-            print(col)
-            import pdb; pdb.set_trace()
         test_df.loc[test_df[col] == '?', col] = np.nan
     for col in cat_columns:
         test_df.loc[test_df[col] == '?', col] = 'nan'
@@ -512,8 +500,7 @@ def process_data(name):
         val_df.loc[val_df[col] == '?', col] = 'nan'
     
     if train_df.isna().any().any():
-        print("Training data contains nan in the numerical cols")
-        import pdb; pdb.set_trace()
+        raise ValueError("Training data contains missing values after preprocessing.")
 
 
     

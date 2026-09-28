@@ -412,31 +412,6 @@ def _agent_synthetic_weight(
     return weight
 
 
-def create_synthetic_smoke_file(data_bundle: DataBundle, output_path: Path, n_samples: int = 64) -> Path:
-    dataset = data_bundle.train_loader.dataset
-    n = min(n_samples, len(dataset))
-    x_scaled = dataset.x[:n].detach().cpu().numpy()
-    y_scaled = dataset.y[:n].detach().cpu().numpy()
-    x_raw = _inverse_x(data_bundle, x_scaled)
-    y_raw = _inverse_y(data_bundle, y_scaled)
-
-    rng = np.random.default_rng(config.SEED)
-    x_std = np.asarray(data_bundle.x_scaler.std_).reshape(-1) if config.STANDARDIZE_X else np.std(x_raw, axis=0)
-    y_std = np.asarray(data_bundle.y_scaler.std_).reshape(-1) if config.STANDARDIZE_Y else np.std(y_raw, axis=0)
-    x_noisy = x_raw + rng.normal(0.0, 0.01, size=x_raw.shape) * np.maximum(x_std.reshape(1, -1), 1.0e-6)
-    y_noisy = y_raw + rng.normal(0.0, 0.01, size=y_raw.shape) * np.maximum(y_std.reshape(1, -1), 1.0e-6)
-
-    df = pd.DataFrame(x_noisy, columns=data_bundle.feature_columns)
-    df[data_bundle.label_column] = y_noisy.reshape(-1)
-    low, high = data_bundle.tail_thresholds
-    df["synthetic_source"] = "SmokeTestNotTabDiff"
-    df["generation_condition"] = "smoke_test_only"
-    df["is_tail_synthetic"] = (df[data_bundle.label_column] <= low) | (df[data_bundle.label_column] >= high)
-    df["tabdiff_sample_id"] = np.arange(len(df), dtype=np.int64)
-    _save_table(df, output_path)
-    return output_path
-
-
 def _load_synthetic_bundle(data_bundle: DataBundle, synthetic_path: str | Path | None = None) -> SyntheticBundle:
     path = _project_path(synthetic_path or getattr(config, "SYNTHETIC_DATA_PATH", "data/synthetic_CAPL_ma_tabdiff.xlsx"))
     if not path.exists():

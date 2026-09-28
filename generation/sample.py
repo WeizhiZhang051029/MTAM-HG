@@ -26,7 +26,6 @@ def _raw_output_path() -> Path:
 
 
 def run_tabdiff_sample(
-    dry_run: bool = False,
     num_samples: int | None = None,
     checkpoint_path: str | Path | None = None,
     expected_checkpoint_sha256: str | None = None,
@@ -34,19 +33,18 @@ def run_tabdiff_sample(
     repo = require_tabdiff_repo()
     ds_name = dataname()
     effective_checkpoint = checkpoint_path or getattr(config, "TABDIFF_CKPT_PATH", "") or None
-    if not dry_run and effective_checkpoint is None:
+    if effective_checkpoint is None:
         raise ValueError(
             "Sampling requires the exact checkpoint produced by the current TabDiff training phase; "
             "implicit checkpoint discovery is disabled."
         )
     checkpoint_snapshot = None
-    if not dry_run:
-        if expected_checkpoint_sha256 is None:
-            raise ValueError("Sampling requires the checkpoint SHA-256 from the current training phase.")
-        checkpoint_snapshot = capture_file_snapshot(project_path(effective_checkpoint))
-        if checkpoint_snapshot.sha256 != str(expected_checkpoint_sha256).lower():
-            raise RuntimeError("The sampling checkpoint does not match the current training phase.")
-        effective_checkpoint = checkpoint_snapshot.path
+    if expected_checkpoint_sha256 is None:
+        raise ValueError("Sampling requires the checkpoint SHA-256 from the current training phase.")
+    checkpoint_snapshot = capture_file_snapshot(project_path(effective_checkpoint))
+    if checkpoint_snapshot.sha256 != str(expected_checkpoint_sha256).lower():
+        raise RuntimeError("The sampling checkpoint does not match the current training phase.")
+    effective_checkpoint = checkpoint_snapshot.path
     cmd = sample_command(
         repo,
         ds_name,
@@ -69,8 +67,6 @@ def run_tabdiff_sample(
         "checkpoint_path": str(effective_checkpoint or ""),
         "checkpoint_sha256": str(expected_checkpoint_sha256 or ""),
     }
-    if dry_run:
-        return result
     if not deps_ok:
         raise RuntimeError(deps_message)
     previous_snapshot = sample_output_snapshot(repo, ds_name)
@@ -88,15 +84,8 @@ def run_tabdiff_sample(
     return result
 
 
-def _str_to_bool(value: str | bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    return str(value).lower() in {"1", "true", "yes", "y"}
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run official TabDiff sampling.")
-    parser.add_argument("--dry_run", type=_str_to_bool, nargs="?", const=True, default=False)
     parser.add_argument("--num_samples", type=int, default=None)
     parser.add_argument("--checkpoint_path", default="")
     parser.add_argument("--checkpoint_sha256", default="")
@@ -106,7 +95,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
     result = run_tabdiff_sample(
-        dry_run=args.dry_run,
         num_samples=args.num_samples,
         checkpoint_path=args.checkpoint_path or None,
         expected_checkpoint_sha256=args.checkpoint_sha256 or None,

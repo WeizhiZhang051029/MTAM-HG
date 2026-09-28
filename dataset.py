@@ -337,35 +337,6 @@ def _load_real_arrays(
     return _load_real_arrays_with_snapshot(data_path, node_names, label_column)[:-1]
 
 
-def _make_synthetic_arrays(
-    node_names: list[str],
-    n_samples: int,
-    seed: int,
-) -> tuple[np.ndarray, np.ndarray, list[str], str, dict[str, str], str]:
-    rng = np.random.default_rng(seed)
-    n = len(node_names)
-    x = rng.normal(0.0, 1.0, size=(n_samples, n)).astype(np.float32)
-    index = {name: i for i, name in enumerate(node_names)}
-
-    def col(name: str) -> np.ndarray | float:
-        return x[:, index[name]] if name in index else 0.0
-
-    y = (
-        360.0
-        + 18.0 * col("C")
-        + 8.0 * col("Mn")
-        - 5.0 * col("S")
-        + 7.5 * col("CRR")
-        + 6.0 * col("ATh")
-        - 3.5 * col("AWd")
-        + 5.0 * col("FS")
-        + 3.0 * col("Q_T")
-        + rng.laplace(0.0, 5.0, size=n_samples)
-    ).astype(np.float32)
-    mapping = {name: name for name in node_names}
-    return x, y.reshape(-1, 1), list(node_names), "synthetic_yield_strength", mapping, "synthetic"
-
-
 def _print_data_summary(bundle: DataBundle) -> None:
     print(f"[Data] Source: {bundle.data_path}")
     print(f"[Data] Label column: {bundle.label_column}")
@@ -390,7 +361,6 @@ def create_dataloaders(
     use_el_as_input: bool | None = None,
     save_scaler_path: str | Path | None = None,
     split_method: str | None = None,
-    allow_synthetic: bool = False,
     split_seed: int | None = None,
 ) -> DataBundle:
     seed = config.SEED if seed is None else seed
@@ -412,15 +382,9 @@ def create_dataloaders(
             source,
             source_snapshot,
         ) = _load_real_arrays_with_snapshot(data_path, input_names, label_column)
-    elif allow_synthetic:
-        print("[Data][WARN] Using synthetic CAPL data for development only.")
-        x, y, feature_columns, resolved_label, mapping, source = _make_synthetic_arrays(
-            input_names, config.SYNTHETIC_NUM_SAMPLES, seed
-        )
     else:
         raise ValueError(
-            "A real CAPL data file is required. Pass --data_path \"path\\to\\CAPL.xlsx\". "
-            "Use --allow_synthetic only for code-level development smoke tests."
+            "A real CAPL data file is required. Pass --data_path \"path\\to\\CAPL.xlsx\"."
         )
 
     train_idx, val_idx, test_idx = _split_indices(y, split_seed, split_method)

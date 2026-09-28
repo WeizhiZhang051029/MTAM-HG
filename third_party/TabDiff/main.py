@@ -9,7 +9,6 @@ if __name__ == '__main__':
     parser.add_argument('--dataname', type=str, default='adult', help='Name dataset, one of those in data/ dir')
     parser.add_argument('--mode', type=str, default='train', help='train or test')
     parser.add_argument('--gpu', type=int, default=0, help='GPU index')
-    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
     parser.add_argument('--no_wandb', action='store_true', help='disable wandb')
     parser.add_argument('--exp_name', type=str, default=None, help='Experiment name, used to name log directories and the wandb run name')
     parser.add_argument('--deterministic', action='store_true', help='Whether to make the entire process deterministic, i.e., fix global random seeds')

@@ -13,36 +13,32 @@ NODE_NAMES = [
     "EL", "RF", "BF", "HT", "FRT", "CT", "ATh", "AWd", "CRR", "C", "Mn", "S", "P",
 ]
 
-NODE_TYPE_MAP = {
-    "FS": "operating",
-    "RF": "operating",
-    "BF": "operating",
-
-    "JPF_PT": "procedure",
-    "HF_T": "procedure",
-    "SF_T": "procedure",
-    "SC_T": "procedure",
-    "FC1_T": "procedure",
-    "OA_T": "procedure",
-    "FC2_T": "procedure",
-    "Q_T": "procedure",
-    "HT": "procedure",
-    "FRT": "procedure",
-    "CT": "procedure",
-    "CRR": "procedure",
-
-    "ATh": "conditional",
-    "AWd": "conditional",
-    "C": "conditional",
-    "Mn": "conditional",
-    "S": "conditional",
-    "P": "conditional",
-
-    "EL": "result",
-    "YS_VIRTUAL": "result",
+MECHANISTIC_NODE_GROUPS = {
+    "operating": ["FS"],
+    "procedure": [
+        "JPF_PT", "HF_T", "SF_T", "SC_T", "FC1_T", "OA_T", "FC2_T", "Q_T",
+        "HT", "FRT", "CT",
+    ],
+    "conditional": ["EL", "RF", "BF", "ATh", "AWd", "CRR"],
+    "composition": ["C", "Mn", "S", "P"],
 }
 
-NODE_TYPES = ["operating", "procedure", "conditional", "result"]
+MECHANISTIC_RELATION_GROUPS = {
+    "thermal_stage_chain": ["JPF_PT", "HF_T", "SF_T", "SC_T", "FC1_T", "OA_T", "FC2_T", "Q_T"],
+    "hot_history": ["HT", "FRT", "CT"],
+    "deformation_targets": ["ATh", "CRR"],
+    "cooling_variables": ["SC_T", "FC1_T", "FC2_T", "Q_T"],
+    "geometry_nodes": ["EL", "RF", "BF"],
+}
+
+# Keep the virtual quality node as an internal conditional node when enabled.
+NODE_TYPE_MAP = {
+    node: node_type
+    for node_type, nodes in MECHANISTIC_NODE_GROUPS.items()
+    for node in nodes
+}
+NODE_TYPE_MAP["YS_VIRTUAL"] = "conditional"
+NODE_TYPES = list(MECHANISTIC_NODE_GROUPS)
 NODE_TYPE_TO_ID = {name: idx for idx, name in enumerate(NODE_TYPES)}
 
 USE_VIRTUAL_QUALITY_NODE = False
@@ -129,7 +125,6 @@ SPLIT_SEED = 42
 STANDARDIZE_X = True
 STANDARDIZE_Y = True
 MISSING_VALUE_STRATEGY = "median"
-SYNTHETIC_NUM_SAMPLES = 256
 
 
 SEED = 42
@@ -228,7 +223,6 @@ SYNTHETIC_AGENT_LR = 1.0e-3
 SYNTHETIC_CONFIDENCE_THRESHOLD = 0.50
 SYNTHETIC_PRETRAIN_CONFIDENCE_THRESHOLD = 0.00
 SYNTHETIC_SAVE_DIAGNOSTICS = True
-ALLOW_SYNTHETIC_SMOKE_FALLBACK = False
 SYNTHETIC_USE_PROCESS_CONSISTENCY = True
 SYNTHETIC_PROCESS_CONSISTENCY_THRESHOLD = 0.00
 SYNTHETIC_PROCESS_RANGE_QUANTILE_LOW = 0.01

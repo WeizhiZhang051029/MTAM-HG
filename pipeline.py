@@ -356,7 +356,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default="", help="Optional Python config file with uppercase overrides.")
     parser.add_argument("--experiment_name", default="", help="Name used in metrics summaries.")
     parser.add_argument("--output_dir", default="", help="Experiment output root; creates checkpoints/logs/results under it.")
-    parser.add_argument("--data_path", default="", help="CAPL CSV/XLS/XLSX path. Required unless --allow_synthetic is set.")
+    parser.add_argument("--data_path", default="", help="CAPL CSV/XLS/XLSX path.")
     parser.add_argument("--label_col", default="", help="Yield strength label column name.")
     parser.add_argument("--checkpoint", default="")
     parser.add_argument("--epochs", type=int, default=None)
@@ -471,13 +471,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no_synthetic_process_consistency", action="store_true")
     parser.add_argument("--tabdiff_num_samples", type=int, default=None)
     parser.add_argument("--tabdiff_gpu", type=int, default=None)
-    parser.add_argument("--dry_run", type=_str_to_bool, nargs="?", const=True, default=False)
     parser.add_argument("--use_confidence_weighted_supervised_loss", action="store_true")
     parser.add_argument("--split_method", choices=["stratified_random", "chronological"], default="")
     parser.add_argument("--no_el", action="store_true", help="Exclude EL from input nodes.")
     parser.add_argument("--no_laplace", action="store_true", help="Use deterministic MSE regression.")
     parser.add_argument("--require_existing_synthetic", action="store_true")
-    parser.add_argument("--allow_synthetic", action="store_true", help="Allow synthetic data for development smoke tests only.")
     parser.add_argument("--early_stopping_patience", type=int, default=None)
     parser.add_argument("--min_delta", type=float, default=None)
     return parser
@@ -499,21 +497,19 @@ def run_generate_synthetic_tabdiff(args: argparse.Namespace) -> dict[str, object
         split_method=str(config.SPLIT_METHOD),
         generation_seed=int(getattr(config, "TABDIFF_GENERATION_SEED", 0)),
     )
-    train_result = run_tabdiff_train(dry_run=bool(args.dry_run))
+    train_result = run_tabdiff_train()
     sample_result = run_tabdiff_sample(
-        dry_run=bool(args.dry_run),
         num_samples=int(getattr(config, "TABDIFF_NUM_SAMPLES", DEFAULT_TABDIFF_NUM_SAMPLES)),
         checkpoint_path=train_result.get("checkpoint_path"),
         expected_checkpoint_sha256=train_result.get("checkpoint_sha256"),
     )
     postprocess_result: dict[str, object] | None = None
-    if not args.dry_run:
-        postprocess_result = postprocess_tabdiff_samples(
-            checkpoint_path=train_result.get("checkpoint_path"),
-            expected_checkpoint_sha256=train_result.get("checkpoint_sha256"),
-            expected_scientific_code_sha256=args.scientific_code_sha256 or None,
-            generation_protocol_sha256=args.generation_protocol_sha256 or None,
-        )
+    postprocess_result = postprocess_tabdiff_samples(
+        checkpoint_path=train_result.get("checkpoint_path"),
+        expected_checkpoint_sha256=train_result.get("checkpoint_sha256"),
+        expected_scientific_code_sha256=args.scientific_code_sha256 or None,
+        generation_protocol_sha256=args.generation_protocol_sha256 or None,
+    )
     result = {
         "prepared": prepared,
         "tabdiff_train": train_result,
@@ -615,7 +611,6 @@ def main() -> None:
         split_seed=int(config.SPLIT_SEED),
         use_el_as_input=config.USE_EL_AS_INPUT,
         split_method=config.SPLIT_METHOD,
-        allow_synthetic=args.allow_synthetic,
     )
 
     if args.mode == "evaluate":

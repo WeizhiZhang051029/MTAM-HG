@@ -9,19 +9,11 @@ import torch.nn.functional as F
 import config
 from models.ipohgn import IPOHGNExpert
 
-FOUR_EXPERT_NAMES = [
-    "composition_property",
-    "thermal_process",
-    "process_coupling",
-    "quality_sensitive",
-]
-
+FOUR_EXPERT_NAMES = list(config.NODE_TYPES)
 MECHANISM_EXPERT_NODE_GROUPS = {
-    "composition_property": ["C", "Mn", "S", "P", "ATh", "AWd", "HT", "FRT", "CT"],
-    "thermal_process": ["JPF_PT", "HF_T", "SF_T", "SC_T", "FC1_T", "OA_T", "FC2_T", "Q_T", "HT", "FRT", "CT"],
-    "process_coupling": ["RF", "BF", "CRR", "ATh", "AWd", "FS", "CT", "Q_T"],
-    "quality_sensitive": ["C", "Mn", "S", "P", "ATh", "AWd", "CRR", "CT", "Q_T", "FRT"],
+    name: list(nodes) for name, nodes in config.MECHANISTIC_NODE_GROUPS.items()
 }
+
 
 
 def _cfg(name: str, default):

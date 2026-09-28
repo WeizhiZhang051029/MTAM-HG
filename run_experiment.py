@@ -188,7 +188,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the TabDiff generation phase even when --synthetic_data_path is missing.",
     )
-    parser.add_argument("--dry_run", action="store_true")
     return parser
 
 
@@ -458,9 +457,7 @@ def run_experiments(args: argparse.Namespace) -> None:
             command.extend(["--tabdiff_gpu", str(args.tabdiff_gpu)])
         if args.skip_tabdiff_generation:
             command.append("--require_existing_synthetic")
-        if args.dry_run:
-            print(subprocess.list2cmdline(command))
-            continue
+        commands.append(command)
         subprocess.run(command, cwd=PROJECT_ROOT, check=True)
         paths = list(run_dir.rglob("metrics.json"))
         if len(paths) != 1:
@@ -470,8 +467,26 @@ def run_experiments(args: argparse.Namespace) -> None:
             raise RuntimeError("Run and split seeds do not match.")
         if not all(math.isfinite(float(metrics[m])) for m in PAPER_METRICS):
             raise RuntimeError(f"Non-finite evaluation metric for seed {seed}.")
-    if not args.dry_run:
-        print(f"Results: {root}")
+        results.append({"seed": seed, "metrics": metrics, "metrics_path": str(paths[0])})
+    summary = {
+        "protocol": "per_run_split",
+        "feedback_source": "real_training_set",
+        "config": load_yaml_config(PROJECT_ROOT / args.config),
+        "arguments": vars(args),
+        "commands": commands,
+        "runs": results,
+        "aggregate": {
+            metric: {
+                "mean": float(np.mean([run["metrics"][metric] for run in results])),
+                "std": float(np.std([run["metrics"][metric] for run in results], ddof=1)) if len(results) > 1 else None,
+            }
+            for metric in PAPER_METRICS
+        } if results else {},
+    }
+    root.mkdir(parents=True, exist_ok=True)
+    (root / RUNNER_SUMMARY_NAME).write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"Results: {root}")
+    return summary
 
 
 def main() -> None:

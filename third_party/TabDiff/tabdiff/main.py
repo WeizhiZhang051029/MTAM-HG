@@ -143,7 +143,7 @@ def main(args):
     ## Creat model_save and result paths
     model_save_path, result_save_path = None, None
     if args.mode == 'train':
-        model_save_path = 'debug/ckpt' if args.debug else f'{curr_dir}/ckpt/{dataname}/{exp_name}'
+        model_save_path = f'{curr_dir}/ckpt/{dataname}/{exp_name}'
         result_save_path = model_save_path.replace('ckpt', 'result')  #i.e., f'{curr_dir}/results/{dataname}/{exp_name}'
     elif args.mode == 'test':
         result_save_path = os.path.dirname(ckpt_path).replace('ckpt', 'result')
@@ -175,13 +175,6 @@ def main(args):
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
     
-    ## Set debug mode parameters
-    if args.debug:  # fast eval for DEBUG mode
-        raw_config['train']['main']['check_val_every'] = 2
-        raw_config['diffusion_params']['num_timesteps'] = 4
-        raw_config['train']['main']['batch_size'] = 4096
-        raw_config['sample']['batch_size'] = 10000
-
     ## Load training data
     batch_size = raw_config['train']['main']['batch_size']
 
@@ -292,7 +285,7 @@ def main(args):
         project=raw_config['project_name'], 
         name=exp_name,
         config=raw_config,
-        mode='disabled' if args.debug or args.no_wandb else 'online',
+        mode='disabled' if args.no_wandb else 'online',
     )
 
     ## Load Trainer

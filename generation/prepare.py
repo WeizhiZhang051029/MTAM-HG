@@ -34,29 +34,8 @@ from protocol_integrity import (
     split_fingerprints,
 )
 
-PAPER_FEATURE_KEYS: tuple[str, ...] = (
-    "FS",
-    "JPF_PT",
-    "HF_T",
-    "SF_T",
-    "SC_T",
-    "FC1_T",
-    "OA_T",
-    "FC2_T",
-    "Q_T",
-    "RF",
-    "BF",
-    "HT",
-    "FRT",
-    "CT",
-    "ATh",
-    "AWd",
-    "CRR",
-    "C",
-    "Mn",
-    "S",
-    "P",
-)
+PAPER_FEATURE_KEYS: tuple[str, ...] = tuple(config.input_node_names(False))
+
 
 
 def _read_table(path: str | Path) -> pd.DataFrame:

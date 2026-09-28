@@ -19,7 +19,7 @@ def build_stage_ids(node_names: list[str] | None = None) -> torch.LongTensor:
         stage_id = config.STAGE_TO_ID[stage_name]
         for name in names:
             stage_lookup[name] = stage_id
-    stage_lookup.setdefault("EL", config.STAGE_TO_ID["stage3_annealing_thermal"])
+    stage_lookup.setdefault("EL", config.STAGE_TO_ID[config.QUALITY_STAGE_NAME])
     return torch.tensor([stage_lookup[name] for name in node_names], dtype=torch.long)
 
 
@@ -53,26 +53,30 @@ def build_mechanistic_prior_graph(
     node_to_idx = {name: idx for idx, name in enumerate(node_names)}
     A = np.zeros((n, n), dtype=np.float32)
 
-    composition = ["C", "Mn", "S", "P"]
-    hot_history = ["HT", "FRT", "CT"]
-    cold_deformation = ["RF", "BF", "ATh", "AWd", "CRR"]
-    annealing = ["FS", "JPF_PT", "HF_T", "SF_T", "SC_T", "FC1_T", "OA_T", "FC2_T", "Q_T"]
-    result_nodes = []
-    if "EL" in node_to_idx:
-        result_nodes.append("EL")
-    if config.VIRTUAL_QUALITY_NODE_NAME in node_to_idx:
-        result_nodes.append(config.VIRTUAL_QUALITY_NODE_NAME)
+    groups = config.MECHANISTIC_NODE_GROUPS
+    operating = groups["operating"]
+    procedure = groups["procedure"]
+    conditional = groups["conditional"]
+    composition = groups["composition"]
 
-    _add_edges(A, node_to_idx, composition, hot_history, 1.00)
-    _add_edges(A, node_to_idx, hot_history, cold_deformation, 0.90)
-    _add_edges(A, node_to_idx, cold_deformation, annealing, 0.90)
-    _add_edges(A, node_to_idx, annealing, result_nodes, 1.00)
+    # Representative relations from the CAPL mechanistic-prior table.
+    relations = config.MECHANISTIC_RELATION_GROUPS
+    thermal_stage_chain = relations["thermal_stage_chain"]
+    hot_history = relations["hot_history"]
+    deformation_targets = relations["deformation_targets"]
+    cooling_variables = relations["cooling_variables"]
+    geometry_nodes = relations["geometry_nodes"]
 
-    ordered_groups = list(config.PROCESS_ORDER_NODE_MAP.values())
-    for sources, targets in zip(ordered_groups, ordered_groups[1:]):
-        _add_edges(A, node_to_idx, sources, targets, 0.75)
+    _add_edges(A, node_to_idx, operating, procedure, 1.00)
+    for source_group, target_group in zip(thermal_stage_chain, thermal_stage_chain[1:]):
+        _add_edges(A, node_to_idx, [source_group], [target_group], 0.90)
+    _add_edges(A, node_to_idx, hot_history, deformation_targets, 0.90)
+    _add_edges(A, node_to_idx, cooling_variables, ["EL", "RF", "BF"], 0.90)
+    _add_edges(A, node_to_idx, geometry_nodes, ["RF"], 0.75)
+    _add_edges(A, node_to_idx, composition, conditional, 1.00)
 
-    for type_name in ["procedure", "conditional", "operating"]:
+    # Light within-type connectivity preserves the heterogeneous node classes.
+    for type_name in config.NODE_TYPES:
         type_nodes = [name for name in node_names if config.NODE_TYPE_MAP[name] == type_name]
         _add_edges(A, node_to_idx, type_nodes, type_nodes, same_type_weight)
 

@@ -200,13 +200,9 @@ The pipeline sequentially:
 7. selects the model according to validation performance.
 8. evaluates the final model on the held-out test set.
 
-### Check the Experiment Configuration
+### Data Requirement
 
-```bash
-python run_experiment.py --dry_run
-```
-
-This command checks the experiment arguments and prints the per-run commands without training the model.
+Formal training requires an authorized CAPL dataset. This release does not include private data, synthetic smoke-test data, or a dry-run validation path.
 
 ---
 
@@ -281,13 +277,13 @@ MTAM-HG-A-Mixture-of-Experts-Heterogeneous-Graph-Network-with-Agent-Regulated-Di
 The main components are organized as follows:
 
 - `configs/mtam_hg.yaml`: configuration for the main MTAM-HG experiment.
-- `run_experiment.py`: experiment execution with separate outputs for each run.
+- `run_experiment.py`: entry point for the ten-run main experiment, with separate output directories for each run.
 - `generation/`: MP-TabDiff data preparation, training, sampling, and mechanism-based postprocessing.
 - `models/`: heterogeneous graph construction, IPOHGN experts, mixture-of-experts routing, and MR-LoRA adaptation.
 - `training/`: CBTG-Agent regulation, working-condition clustering, synthetic pretraining, and supporting training routines.
 - `dataset.py`: data loading, partitioning, and preprocessing.
 - `pipeline.py`, `train.py`, and `evaluate.py`: workflow orchestration, model training, and prediction evaluation.
-- `config.py`, `config_loader.py`, and `protocol.py`: model settings, configuration loading, and experiment defaults.
+- `config.py`, `config_loader.py`, and `protocol.py`: model settings, configuration loading, and experiment protocol definitions.
 - `losses.py` and `metrics.py`: training objectives and regression evaluation metrics.
 - `protocol_integrity.py`: data-partition and synthetic-data provenance validation.
 - `utils/`: graph utilities, random-seed initialization, and logging.
