@@ -180,13 +180,12 @@ The default main experiment requires **Linux and an NVIDIA GPU with CUDA support
 
 ### Complete MTAM-HG Experiment
 
-To reproduce the complete ten-run experiment:
+To reproduce the complete experiment:
 
 ```bash
 python run_experiment.py \
   --data_path data/CAPL.xlsx \
   --config configs/mtam_hg.yaml \
-  --seeds 42 43 44 45 46 47 48 49 50 51 \
   --tabdiff_num_samples 5000
 ```
 
