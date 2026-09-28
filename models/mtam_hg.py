@@ -24,7 +24,7 @@ def _cfg(name: str, default):
 
 
 def _moe_aux_lambda() -> float:
-    return float(_cfg("MOE_AUX_LAMBDA", getattr(config, "LAMBDA_MOE", 0.01)))
+    return float(_cfg("MOE_AUX_LAMBDA", 0.01))
 
 
 def router_load_balance_loss(

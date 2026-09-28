@@ -37,11 +37,6 @@ from protocol_integrity import (
 PAPER_FEATURE_KEYS: tuple[str, ...] = tuple(config.input_node_names(False))
 
 
-
-def _read_table(path: str | Path) -> pd.DataFrame:
-    return _read_table_snapshot(path).frame
-
-
 def _clean_train_table(
     train_df: pd.DataFrame,
     numerical_columns: list[str],
@@ -130,12 +125,6 @@ def prepare_tabdiff_data(
     prepared_snapshot = capture_file_snapshot(project_train_csv)
     prepared_train_hash = prepared_snapshot.sha256
 
-    y_train = pd.to_numeric(train_df[resolved_label], errors="coerce").to_numpy(dtype=np.float64)
-    low_q = float(getattr(config, "TAIL_QUANTILE_LOW", 0.10))
-    high_q = float(getattr(config, "TAIL_QUANTILE_HIGH", 0.90))
-    low_threshold = float(np.quantile(y_train, low_q))
-    high_threshold = float(np.quantile(y_train, high_q))
-
     numerical_bounds = {
         col: {
             "min": float(pd.to_numeric(train_df[col], errors="coerce").min()),
@@ -163,11 +152,6 @@ def prepare_tabdiff_data(
         "paper_feature_keys": list(PAPER_FEATURE_KEYS),
         "paper_feature_mapping": feature_mapping,
         "all_columns": columns,
-        "tail_threshold_mode": getattr(config, "TAIL_THRESHOLD_MODE", "train_quantile"),
-        "tail_quantile_low": low_q,
-        "tail_quantile_high": high_q,
-        "low_tail_threshold": low_threshold,
-        "high_tail_threshold": high_threshold,
         "source_data_sha256": source_hash,
         "schema_sha256": schema_hash,
         "split_method": split_method,
@@ -249,8 +233,6 @@ def prepare_tabdiff_data(
         "numerical_columns": numerical_columns,
         "categorical_columns": categorical_columns,
         "label_col": resolved_label,
-        "low_tail_threshold": low_threshold,
-        "high_tail_threshold": high_threshold,
         "source_data_sha256": source_hash,
         "prepared_train_csv_sha256": prepared_train_hash,
         "schema_sha256": schema_hash,

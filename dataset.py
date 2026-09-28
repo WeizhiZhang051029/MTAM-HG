@@ -79,7 +79,6 @@ class DataBundle:
     feature_columns: list[str]
     column_mapping: dict[str, str]
     label_column: str
-    tail_thresholds: tuple[float, float]
     y_train_raw: np.ndarray
     train_sample_ids: np.ndarray
     val_sample_ids: np.ndarray
@@ -122,10 +121,6 @@ def _resolve_data_path(path: str | Path) -> Path:
             return candidate.resolve()
     tried = "\n".join(str(candidate) for candidate in candidates)
     raise FileNotFoundError(f"CAPL data file was not found. Tried:\n{tried}")
-
-
-def _read_table(path: str | Path) -> pd.DataFrame:
-    return _read_table_snapshot(path).frame
 
 
 def _read_table_snapshot(path: str | Path) -> TableSnapshot:
@@ -406,8 +401,6 @@ def create_dataloaders(
     x_train, x_val, x_test = _fill_missing(x_train, x_val, x_test)
     y_train, y_val, y_test = _fill_missing(y_train, y_val, y_test)
     y_train_raw = np.array(y_train, copy=True)
-    tail_lower = float(np.quantile(y_train.reshape(-1), config.TAIL_QUANTILE))
-    tail_upper = float(np.quantile(y_train.reshape(-1), 1.0 - config.TAIL_QUANTILE))
 
     x_scaler = StandardScaler().fit(x_train)
     y_scaler = StandardScaler().fit(y_train)
@@ -474,7 +467,6 @@ def create_dataloaders(
         feature_columns=feature_columns,
         column_mapping=mapping,
         label_column=resolved_label,
-        tail_thresholds=(tail_lower, tail_upper),
         y_train_raw=y_train_raw,
         train_sample_ids=train_idx,
         val_sample_ids=val_idx,

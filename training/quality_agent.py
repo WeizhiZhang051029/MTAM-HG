@@ -2,8 +2,10 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
+from metrics import REGRESSION_METRIC_NAMES
 
-PAPER_CBTG_METRIC_NAMES = ("RMSE", "MAE", "MAPE", "ONE_MINUS_R2")
+
+PAPER_CBTG_METRIC_NAMES = (*REGRESSION_METRIC_NAMES[:3], "ONE_MINUS_R2")
 
 PAPER_CBTG_STATE_COMPONENTS = (
     "overall_mean",

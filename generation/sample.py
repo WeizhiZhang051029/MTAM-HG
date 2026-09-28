@@ -12,6 +12,7 @@ from generation.tabdiff import (
     dataname,
     generation_seed,
     project_path,
+    raw_output_path,
     require_tabdiff_repo,
     run_command,
     sample_command,
@@ -19,10 +20,6 @@ from generation.tabdiff import (
     tabdiff_remote,
 )
 from protocol_integrity import assert_file_snapshot_current, capture_file_snapshot
-
-
-def _raw_output_path() -> Path:
-    return project_path(getattr(config, "TABDIFF_OUTPUT_DIR", "outputs/tabdiff")) / "synthetic_CAPL_raw.csv"
 
 
 def run_tabdiff_sample(
@@ -52,7 +49,7 @@ def run_tabdiff_sample(
         checkpoint_path=effective_checkpoint,
     )
     deps_ok, deps_message = check_tabdiff_dependencies(repo)
-    output_path = _raw_output_path()
+    output_path = raw_output_path()
     result = {
         "tabdiff_repo_path": str(repo),
         "tabdiff_remote": tabdiff_remote(repo),

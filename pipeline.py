@@ -17,6 +17,7 @@ from protocol import (
     DEFAULT_TABDIFF_NUM_SAMPLES,
     MAIN_PY_MODE_CHOICES,
     SUPERVISED_MAIN_TRAIN_MODE,
+    str_to_bool,
 )
 
 
@@ -25,11 +26,6 @@ def _set_mapped_config(attr: str, value) -> None:
     lower = attr.lower()
     if hasattr(config, lower):
         setattr(config, lower, value)
-    if attr in {"MOE_AUX_LAMBDA", "LAMBDA_MOE"}:
-        config.MOE_AUX_LAMBDA = value
-        config.LAMBDA_MOE = value
-        config.MOE_AUX_WEIGHT = value
-        config.moe_aux_lambda = value
 
 
 def set_output_dir(path: str) -> None:
@@ -59,18 +55,17 @@ _YAML_CONFIG_MAPPING = {key: key.upper() for key in """
     feedback_eval_batch_size fused_pretrain_optimizer cache_positional_encoding
     skip_redundant_real_forward skip_refresh_diagnostics data_path batch_size
     epochs lr weight_decay dropout seed split_seed split_method generation_seed
-    graph_backbone_layers top_k lambda_moe moe_aux_lambda moe_gate_temperature
+    graph_backbone_layers top_k moe_aux_lambda moe_gate_temperature
     moe_balance_prob_lambda moe_balance_usage_lambda moe_entropy_reg_lambda
     expert_calibration_lambda expert_diversity_lambda expert_calibration_quality_lambda
     expert_calibration_quality_index num_experts agent_hidden_dim agent_dropout
     agent_use_process_features agent_reason_dim agent_reliability_routing_lambda
     agent_confidence_reg_lambda use_agent_reward agent_reward_lambda reward_alpha_error
-    reward_alpha_uncertainty reward_alpha_entropy reward_alpha_tail reward_clamp_min
+    reward_alpha_uncertainty reward_alpha_entropy reward_clamp_min
     reward_clamp_max target_confidence_mean confidence_mean_reg_lambda
-    confidence_entropy_reg_lambda tail_quantile_low tail_quantile_high tail_threshold_mode
     use_tabdiff_generation tabdiff_repo_path tabdiff_data_dir tabdiff_output_dir
     tabdiff_dataname tabdiff_exp_name tabdiff_num_samples tabdiff_train_epochs
-    tabdiff_low_tail_ratio tabdiff_high_tail_ratio tabdiff_gpu tabdiff_ckpt_path
+    tabdiff_gpu tabdiff_ckpt_path
     tabdiff_mechanism_constraint tabdiff_mechanism_lambda tabdiff_guidance_scale
     tabdiff_mechanism_temperature_hold_tolerance tabdiff_mechanism_yield_tolerance
     tabdiff_trainable_scope tabdiff_min_save_epoch tabdiff_finetune_lr
@@ -97,15 +92,19 @@ _YAML_CONFIG_MAPPING = {key: key.upper() for key in """
     dynamic_synthetic_quota_strength dynamic_synthetic_quota_min dynamic_synthetic_quota_max
     dynamic_synthetic_reliability_floor dynamic_synthetic_scarcity_bins
     dynamic_synthetic_process_power dynamic_synthetic_mechanism_power
-    dynamic_synthetic_train_reward_metric dynamic_synthetic_train_tail_lambda
+    dynamic_synthetic_train_reward_metric
     use_layerwise_finetune_lr finetune_backbone_lr finetune_head_lr finetune_agent_lr
     finetune_quality_agent_lr freeze_finetune_backbone finetune_trainable_keywords
     use_mr_lora mr_lora_scope mr_lora_rank_graph mr_lora_rank_routing mr_lora_alpha_graph
     mr_lora_alpha_routing mr_lora_dropout mr_lora_train_output_head
     use_cluster_balance_reward num_working_condition_clusters cluster_balance_lambda
-    reward_alpha_cluster checkpoint_selection_metric checkpoint_tail_mae_lambda
+    reward_alpha_cluster checkpoint_selection_metric
 """.split()}
-_YAML_CONFIG_MAPPING.update({'generation_seed': 'TABDIFF_GENERATION_SEED', 'min_delta': 'EARLY_STOPPING_MIN_DELTA'})
+_YAML_CONFIG_MAPPING.update({
+    'generation_seed': 'TABDIFF_GENERATION_SEED',
+    'lambda_moe': 'MOE_AUX_LAMBDA',
+    'min_delta': 'EARLY_STOPPING_MIN_DELTA',
+})
 
 
 def load_config_overrides(path: str | None) -> None:
@@ -254,7 +253,6 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
         "dynamic_synthetic_process_power": "DYNAMIC_SYNTHETIC_PROCESS_POWER",
         "dynamic_synthetic_mechanism_power": "DYNAMIC_SYNTHETIC_MECHANISM_POWER",
         "dynamic_synthetic_train_reward_metric": "DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC",
-        "dynamic_synthetic_train_tail_lambda": "DYNAMIC_SYNTHETIC_TRAIN_TAIL_LAMBDA",
         "tabdiff_num_samples": "TABDIFF_NUM_SAMPLES",
         "tabdiff_gpu": "TABDIFF_GPU",
         "tabdiff_mechanism_constraint": "TABDIFF_MECHANISM_CONSTRAINT",
@@ -286,7 +284,6 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
         "cluster_balance_lambda": "CLUSTER_BALANCE_LAMBDA",
         "reward_alpha_cluster": "REWARD_ALPHA_CLUSTER",
         "checkpoint_selection_metric": "CHECKPOINT_SELECTION_METRIC",
-        "checkpoint_tail_mae_lambda": "CHECKPOINT_TAIL_MAE_LAMBDA",
     }
     for arg_name, cfg_name in value_overrides.items():
         value = getattr(args, arg_name, None)
@@ -302,9 +299,7 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
             config.D_MODEL = args.expert_dim
     if args.lambda_moe is not None or args.moe_aux_lambda is not None:
         value = args.moe_aux_lambda if args.moe_aux_lambda is not None else args.lambda_moe
-        config.LAMBDA_MOE = value
-        config.MOE_AUX_LAMBDA = value
-        config.moe_aux_lambda = value
+        _set_mapped_config("MOE_AUX_LAMBDA", value)
     true_flags = {
         "agent_use_sample_weight_for_supervised_loss": "AGENT_USE_SAMPLE_WEIGHT_FOR_SUPERVISED_LOSS",
         "use_agent_reward": "USE_AGENT_REWARD",
@@ -337,12 +332,6 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
         config.USE_EL_AS_INPUT = False
     if args.no_laplace:
         config.USE_LAPLACE = False
-
-def _str_to_bool(value: str | bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    return str(value).lower() in {"1", "true", "yes", "y"}
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="MTAM-HG yield-strength prediction")
@@ -418,8 +407,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no_dynamic_synthetic_agent", dest="use_dynamic_synthetic_agent", action="store_false")
     parser.add_argument("--dynamic_synthetic_refresh_epochs", type=int, default=None)
     parser.add_argument("--dynamic_synthetic_warmup_epochs", type=int, default=None)
-    parser.add_argument("--dynamic_synthetic_use_sampler", type=_str_to_bool, nargs="?", const=True, default=None)
-    parser.add_argument("--dynamic_synthetic_use_loss_weight", type=_str_to_bool, nargs="?", const=True, default=None)
+    parser.add_argument("--dynamic_synthetic_use_sampler", type=str_to_bool, nargs="?", const=True, default=None)
+    parser.add_argument("--dynamic_synthetic_use_loss_weight", type=str_to_bool, nargs="?", const=True, default=None)
     parser.add_argument("--dynamic_synthetic_top_ratio", type=float, default=None)
     parser.add_argument("--dynamic_synthetic_weight_min", type=float, default=None)
     parser.add_argument("--dynamic_synthetic_weight_max", type=float, default=None)
@@ -435,8 +424,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dynamic_synthetic_scarcity_bins", type=int, default=None)
     parser.add_argument("--dynamic_synthetic_process_power", type=float, default=None)
     parser.add_argument("--dynamic_synthetic_mechanism_power", type=float, default=None)
-    parser.add_argument("--dynamic_synthetic_train_reward_metric", choices=["", "rmse", "mae", "rmse_tail"], default="")
-    parser.add_argument("--dynamic_synthetic_train_tail_lambda", type=float, default=None)
+    parser.add_argument("--dynamic_synthetic_train_reward_metric", choices=["", "rmse", "mae"], default="")
     parser.add_argument("--use_cluster_balance_reward", action="store_true")
     parser.add_argument("--no_cluster_balance_reward", action="store_true")
     parser.add_argument("--num_working_condition_clusters", type=int, default=None)
@@ -463,8 +451,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mr_lora_dropout", type=float, default=None)
     parser.add_argument("--mr_lora_train_output_head", action="store_true")
     parser.add_argument("--no_mr_lora_train_output_head", action="store_true")
-    parser.add_argument("--checkpoint_selection_metric", choices=["rmse", "rmse_tail"], default=None)
-    parser.add_argument("--checkpoint_tail_mae_lambda", type=float, default=None)
+    parser.add_argument("--checkpoint_selection_metric", choices=["rmse"], default=None)
     parser.add_argument("--use_synthetic_process_consistency", action="store_true")
     parser.add_argument("--use_layerwise_finetune_lr", action="store_true")
     parser.add_argument("--no_layerwise_finetune_lr", action="store_true")

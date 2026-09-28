@@ -58,11 +58,7 @@ epochs: 50
 early_stopping_patience: 5
 dropout: 0.2
 min_delta: 0.0
-tail_threshold_mode: train_quantile
-tail_quantile_low: 0.1
-tail_quantile_high: 0.9
 checkpoint_selection_metric: rmse
-checkpoint_tail_mae_lambda: 0.0
 expert_calibration_lambda: 0.03
 expert_diversity_lambda: 0.001
 

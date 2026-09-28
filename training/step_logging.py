@@ -36,7 +36,6 @@ def synthetic_step_logs(
     process_consistency,
     mechanism_consistency,
     selected,
-    is_tail,
     dynamic_batch_weight,
     update_quality_agent,
     device,
@@ -86,7 +85,6 @@ def synthetic_step_logs(
         "synthetic_final_weight_mean": quality_mean,
         "synthetic_final_weight_std": quality_std,
         "synthetic_selected_ratio": selected.detach().float().mean(),
-        "synthetic_tail_ratio": is_tail.detach().float().mean(),
         "dynamic_synthetic_weight_mean": dynamic_batch_weight.detach().mean()
         if dynamic_batch_weight is not None
         else float("nan"),

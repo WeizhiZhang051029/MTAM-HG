@@ -18,7 +18,8 @@ from tqdm import tqdm
 
 import config
 from dataset import CAPLDataset, DataBundle
-from evaluate import evaluate_model, save_evaluation_outputs
+from evaluate import _inverse_y, evaluate_model, save_evaluation_outputs
+from generation.tabdiff import project_path
 from losses import total_loss as paper_total_loss
 from metrics import compute_metrics
 from models.mtam_hg import MECHANISM_EXPERT_NODE_GROUPS
@@ -27,6 +28,7 @@ from train import (
     checkpoint_payload,
     count_total_parameters,
     count_trainable_parameters,
+    _output_mu,
     restore_model_checkpoint,
     resolve_device,
     save_split_artifacts,
@@ -163,17 +165,6 @@ def _normalize_positive(values: np.ndarray, neutral: float = 0.5) -> np.ndarray:
     return np.clip((clipped - low) / (high - low), 0.0, 1.0)
 
 
-def _project_path(path: str | Path) -> Path:
-    raw = Path(path)
-    return raw if raw.is_absolute() else (config.PROJECT_ROOT / raw)
-
-
-def _read_table(path: Path) -> pd.DataFrame:
-    from protocol_integrity import read_table_snapshot
-
-    return read_table_snapshot(path).frame
-
-
 def _save_table(df: pd.DataFrame, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.suffix.lower() == ".csv":
@@ -188,16 +179,12 @@ def _inverse_x(data_bundle: DataBundle, x: np.ndarray) -> np.ndarray:
     return data_bundle.x_scaler.inverse_transform(x) if config.STANDARDIZE_X else x
 
 
-def _inverse_y(data_bundle: DataBundle, y: np.ndarray) -> np.ndarray:
-    return data_bundle.y_scaler.inverse_transform(y) if config.STANDARDIZE_Y else y
-
-
 def _train_arrays(data_bundle: DataBundle) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     dataset = data_bundle.train_loader.dataset
     x_scaled = dataset.x.detach().cpu().numpy().astype(np.float32)
     y_scaled = dataset.y.detach().cpu().numpy().astype(np.float32)
     x_raw = _inverse_x(data_bundle, x_scaled).astype(np.float32)
-    y_raw = _inverse_y(data_bundle, y_scaled).astype(np.float32)
+    y_raw = _inverse_y(y_scaled, data_bundle).astype(np.float32)
     return x_scaled, y_scaled, x_raw, y_raw
 
 
@@ -413,7 +400,7 @@ def _agent_synthetic_weight(
 
 
 def _load_synthetic_bundle(data_bundle: DataBundle, synthetic_path: str | Path | None = None) -> SyntheticBundle:
-    path = _project_path(synthetic_path or getattr(config, "SYNTHETIC_DATA_PATH", "data/synthetic_CAPL_ma_tabdiff.xlsx"))
+    path = project_path(synthetic_path or getattr(config, "SYNTHETIC_DATA_PATH", "data/synthetic_CAPL_ma_tabdiff.xlsx"))
     if not path.exists():
         raise FileNotFoundError(f"Synthetic data file was not found: {path}")
 
@@ -477,11 +464,6 @@ def _load_synthetic_bundle(data_bundle: DataBundle, synthetic_path: str | Path |
         num_workers=config.NUM_WORKERS,
     )
 
-    if "is_tail_synthetic" in df.columns:
-        is_tail = df["is_tail_synthetic"].astype(bool).to_numpy()
-    else:
-        low, high = data_bundle.tail_thresholds
-        is_tail = ((y_raw.reshape(-1) <= low) | (y_raw.reshape(-1) >= high))
     source = df["synthetic_source"].astype(str).to_numpy() if "synthetic_source" in df.columns else np.array(["TabDiff"] * len(df))
     condition = (
         df["generation_condition"].astype(str).to_numpy()
@@ -494,7 +476,6 @@ def _load_synthetic_bundle(data_bundle: DataBundle, synthetic_path: str | Path |
         loader=loader,
         frame=df,
         y_raw=y_raw.reshape(-1),
-        is_tail=is_tail.reshape(-1),
         synthetic_source=source.reshape(-1),
         generation_condition=condition.reshape(-1),
         process_consistency=scores["process_consistency"],
@@ -594,13 +575,11 @@ def zero_agent_feedback_features(n: int) -> np.ndarray:
 def _paper_oriented_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
-    tail_thresholds: tuple[float, float],
 ) -> np.ndarray:
 
     values = compute_metrics(
         np.asarray(y_true, dtype=np.float64).reshape(-1, 1),
         np.asarray(y_pred, dtype=np.float64).reshape(-1, 1),
-        tail_thresholds=tail_thresholds,
     )
     return np.asarray(
         (
@@ -722,7 +701,7 @@ def evaluate_training_feedback(
         y_true = y_scaled.reshape(-1)
         y_pred = pred_scaled.reshape(-1)
 
-    overall = _paper_oriented_metrics(y_true, y_pred, data_bundle.tail_thresholds)
+    overall = _paper_oriented_metrics(y_true, y_pred)
     feedback_history.append(overall.copy())
     run_std = (
         np.std(np.stack(feedback_history), axis=0, ddof=1)
@@ -742,7 +721,6 @@ def evaluate_training_feedback(
             per_cluster[cluster_idx] = _paper_oriented_metrics(
                 y_true[mask],
                 y_pred[mask],
-                data_bundle.tail_thresholds,
             )
     per_cluster = np.where(np.isfinite(per_cluster), per_cluster, overall[None, :])
     if model_was_training:
@@ -925,15 +903,13 @@ def rebuild_synthetic_loader(
 
 
 def _train_score_from_metrics(metrics: dict[str, float]) -> float:
-    metric = str(getattr(config, "DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC", "rmse_tail")).lower()
+    metric = str(getattr(config, "DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC", "rmse")).lower()
     rmse = float(metrics.get("RMSE", float("inf")))
-    tail_mae = float(metrics.get("TAIL_MAE", metrics.get("Tail_MAE", float("nan"))))
-    if metric in {"rmse_tail", "rmse_plus_tail"}:
-        tail_lambda = float(getattr(config, "DYNAMIC_SYNTHETIC_TRAIN_TAIL_LAMBDA", 0.25))
-        return rmse + (0.0 if not np.isfinite(tail_mae) else tail_lambda * tail_mae)
     if metric == "mae":
         return float(metrics.get("MAE", rmse))
-    return rmse
+    if metric == "rmse":
+        return rmse
+    raise ValueError(f"DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC must be 'rmse' or 'mae', got {metric!r}.")
 
 
 def _feedback_for_clusters(training_feedback, cluster_ids):
@@ -1184,10 +1160,6 @@ def refresh_dynamic_synthetic_weights(
     }
 
 
-def _output_mu(outputs: dict[str, torch.Tensor] | torch.Tensor) -> torch.Tensor:
-    return outputs if torch.is_tensor(outputs) else outputs["mu"]
-
-
 def paper_cbtg_agent_loss(
     confidence: torch.Tensor,
     reward: torch.Tensor,
@@ -1231,7 +1203,6 @@ def _synthetic_step(
     y = y.to(device)
     sample_ids_np = sample_ids.detach().cpu().numpy().reshape(-1)
     metadata_values = {
-        "is_tail": synthetic_bundle.is_tail[sample_ids_np],
         "process": synthetic_bundle.process_consistency[sample_ids_np],
         "mechanism": synthetic_bundle.mechanism_consistency[sample_ids_np],
     }
@@ -1242,7 +1213,6 @@ def _synthetic_step(
         if x.dtype == y.dtype:
             metadata_values["feedback"] = dynamic_state.feedback_features[sample_ids_np]
     metadata = transfer_float_metadata(metadata_values, dtype=y.dtype, device=device)
-    is_tail = metadata["is_tail"]
     outputs = model(x)
     if torch.is_tensor(outputs):
         outputs = {"mu": outputs}
@@ -1333,7 +1303,7 @@ def _synthetic_step(
         outputs=outputs, base_loss_logs=base_loss_logs, agent_logs=agent_logs,
         agent_loss=agent_loss, total=total, quality_score=quality_score,
         process_consistency=process_consistency, mechanism_consistency=mechanism_consistency,
-        selected=selected, is_tail=is_tail, dynamic_batch_weight=dynamic_batch_weight,
+        selected=selected, dynamic_batch_weight=dynamic_batch_weight,
         update_quality_agent=update_quality_agent, device=device,
     )
     step_logs["synthetic_real_diagnostics_skipped"] = float(skip_real_diagnostics)

@@ -92,22 +92,11 @@ def _standardize_batch(values: torch.Tensor, eps: float = 1.0e-8) -> torch.Tenso
     return (values - flat.mean()) / (flat.std(unbiased=False) + eps)
 
 
-def _batch_tail_indicator(y_true: torch.Tensor) -> torch.Tensor:
-
-    y_flat = y_true.detach().reshape(-1)
-    low_q = float(getattr(config, "TAIL_QUANTILE_LOW", getattr(config, "TAIL_QUANTILE", 0.10)))
-    high_q = float(getattr(config, "TAIL_QUANTILE_HIGH", 1.0 - getattr(config, "TAIL_QUANTILE", 0.10)))
-    low = torch.quantile(y_flat, low_q)
-    high = torch.quantile(y_flat, high_q)
-    return ((y_flat <= low) | (y_flat >= high)).to(dtype=y_true.dtype, device=y_true.device)
-
-
 def compute_agent_reward(
     y_pred: torch.Tensor,
     y_true: torch.Tensor,
     expert_preds: torch.Tensor,
     gate_probs: torch.Tensor,
-    tail_indicator: torch.Tensor | None = None,
     cluster_labels: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
 
@@ -117,18 +106,11 @@ def compute_agent_reward(
     uncertainty = expert_preds.detach().var(dim=1, unbiased=False).reshape(expert_preds.shape[0], -1).mean(dim=-1)
     gate_entropy = -(gate_probs * torch.log(gate_probs + 1.0e-8)).sum(dim=-1)
     normalized_entropy = gate_entropy / torch.log(gate_probs.new_tensor(float(gate_probs.shape[-1])))
-    if tail_indicator is None:
-        tail_indicator = _batch_tail_indicator(y_true)
-    else:
-        tail_indicator = tail_indicator.detach().reshape(-1).to(dtype=y_true.dtype, device=y_true.device)
-
     norm_error = _standardize_batch(per_sample_error)
     norm_uncertainty = _standardize_batch(uncertainty)
     prediction_error_reward = -float(getattr(config, "REWARD_ALPHA_ERROR", 1.0)) * norm_error
     uncertainty_reward = -float(getattr(config, "REWARD_ALPHA_UNCERTAINTY", 0.5)) * norm_uncertainty
     entropy_reward = float(getattr(config, "REWARD_ALPHA_ENTROPY", 0.1)) * normalized_entropy
-    tail_bonus = float(getattr(config, "REWARD_ALPHA_TAIL", 0.2)) * tail_indicator
-
     cluster_balance_penalty = y_pred.new_tensor(0.0)
     var_cluster_val = y_pred.new_tensor(0.0)
     cluster_details: dict[str, torch.Tensor] = {}
@@ -169,7 +151,7 @@ def compute_agent_reward(
             "var_r2": var_r2.detach(),
         }
 
-    reward = prediction_error_reward + uncertainty_reward + entropy_reward + tail_bonus + cluster_balance_penalty
+    reward = prediction_error_reward + uncertainty_reward + entropy_reward + cluster_balance_penalty
     reward = reward.detach()
     reward = torch.clamp(
         reward,
@@ -185,8 +167,6 @@ def compute_agent_reward(
         "prediction_error_reward": prediction_error_reward.detach(),
         "uncertainty_reward": uncertainty_reward.detach(),
         "entropy_reward": entropy_reward.detach(),
-        "tail_bonus": tail_bonus.detach(),
-        "tail_indicator": tail_indicator.detach(),
         "cluster_balance_penalty": cluster_balance_penalty.detach() if torch.is_tensor(cluster_balance_penalty) else cluster_balance_penalty,
         "var_cluster": var_cluster_val.detach(),
         **cluster_details,
@@ -200,7 +180,6 @@ def compute_agent_reward_loss(
     expert_preds: torch.Tensor,
     gate_probs: torch.Tensor,
     sample_confidence: torch.Tensor,
-    tail_indicator: torch.Tensor | None = None,
     cluster_labels: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, dict[str, float]]:
 
@@ -209,7 +188,6 @@ def compute_agent_reward_loss(
         y_true,
         expert_preds,
         gate_probs,
-        tail_indicator=tail_indicator,
         cluster_labels=cluster_labels,
     )
     confidence = sample_confidence.reshape(-1).clamp(1.0e-6, 1.0 - 1.0e-6)
@@ -237,8 +215,6 @@ def compute_agent_reward_loss(
         "prediction_error_reward_mean": float(components["prediction_error_reward"].mean().detach().cpu()),
         "uncertainty_reward_mean": float(components["uncertainty_reward"].mean().detach().cpu()),
         "entropy_reward_mean": float(components["entropy_reward"].mean().detach().cpu()),
-        "tail_bonus_mean": float(components["tail_bonus"].mean().detach().cpu()),
-        "tail_sample_ratio": float(components["tail_indicator"].mean().detach().cpu()),
         "confidence_mean_reg": float(confidence_mean_reg.detach().cpu()),
         "confidence_entropy": float(confidence_entropy.detach().cpu()),
         "cluster_balance_penalty_mean": float(
@@ -351,7 +327,7 @@ def total_loss(
         moe = outputs["aux_loss"].to(y.device)
     else:
         moe = moe_load_balance_loss(outputs.get("gate_weights", [])).to(y.device)
-    lambda_moe = float(getattr(config, "MOE_AUX_LAMBDA", getattr(config, "LAMBDA_MOE", 0.01)))
+    lambda_moe = float(getattr(config, "MOE_AUX_LAMBDA", 0.01))
     total = pred + lambda_moe * moe
     expert_calib = torch.tensor(0.0, device=y.device)
     lambda_expert_calib = float(getattr(config, "EXPERT_CALIBRATION_LAMBDA", 0.0))

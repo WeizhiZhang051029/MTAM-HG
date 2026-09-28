@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 import config
-from generation.tabdiff import project_path
+from generation.tabdiff import project_path, raw_output_path
 from protocol_integrity import (
     PROVENANCE_FORMAT,
     TABDIFF_DETERMINISTIC_SEED,
@@ -27,10 +27,6 @@ from protocol_integrity import (
 
 def _default_metadata_path() -> Path:
     return project_path(getattr(config, "TABDIFF_DATA_DIR", "data/tabdiff")) / "capl_metadata.json"
-
-
-def _default_raw_path() -> Path:
-    return project_path(getattr(config, "TABDIFF_OUTPUT_DIR", "outputs/tabdiff")) / "synthetic_CAPL_raw.csv"
 
 
 def _default_output_path() -> Path:
@@ -84,7 +80,7 @@ def postprocess_tabdiff_samples(
     split_hashes = metadata.get("split_id_sha256")
     if not isinstance(split_hashes, dict) or set(split_hashes) != {"train", "val", "test"}:
         raise RuntimeError("Prepared TabDiff metadata does not contain complete split fingerprints.")
-    raw_file = project_path(raw_path or _default_raw_path())
+    raw_file = project_path(raw_path or raw_output_path())
     out_file = project_path(output_path or _default_output_path())
 
     source_file = Path(str(metadata["source_data_path"]))
@@ -183,13 +179,8 @@ def postprocess_tabdiff_samples(
             fill = float(np.nanmedian(clipped.to_numpy())) if clipped.notna().any() else low
             df[col] = clipped.fillna(fill)
 
-    y = pd.to_numeric(df[label_col], errors="coerce") if label_col in df.columns else pd.Series([], dtype=float)
-    low_threshold = float(metadata["low_tail_threshold"])
-    high_threshold = float(metadata["high_tail_threshold"])
-    is_tail = ((y <= low_threshold) | (y >= high_threshold)).astype(bool) if len(y) else False
     df["synthetic_source"] = "TabDiff"
     df["generation_condition"] = generation_condition or "unconditional"
-    df["is_tail_synthetic"] = is_tail
     df["tabdiff_sample_id"] = np.arange(len(df), dtype=np.int64)
 
     _save_samples(df, out_file)

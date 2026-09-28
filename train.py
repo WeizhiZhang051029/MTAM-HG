@@ -399,24 +399,16 @@ def checkpoint_selection_score(val_metrics: dict[str, float]) -> tuple[float, di
 
     metric = str(getattr(config, "CHECKPOINT_SELECTION_METRIC", "rmse") or "rmse").lower()
     rmse = float(val_metrics.get("RMSE", float("inf")))
-    tail_mae = float(val_metrics.get("TAIL_MAE", val_metrics.get("Tail_MAE", float("nan"))))
-    tail_lambda = float(getattr(config, "CHECKPOINT_TAIL_MAE_LAMBDA", 0.0) or 0.0)
-    if metric in {"rmse", "val_rmse"}:
-        score = rmse
-    elif metric in {"rmse_tail", "rmse_plus_tail", "val_rmse_plus_tail"}:
-        tail_term = 0.0 if not np.isfinite(tail_mae) else tail_lambda * tail_mae
-        score = rmse + tail_term
-    else:
+    if metric not in {"rmse", "val_rmse"}:
         raise ValueError(
-            "CHECKPOINT_SELECTION_METRIC must be 'rmse' or 'rmse_tail', "
+            "CHECKPOINT_SELECTION_METRIC must be 'rmse', "
             f"got {metric!r}."
         )
+    score = rmse
     return score, {
         "checkpoint_selection_metric": metric,
         "checkpoint_score": float(score),
         "checkpoint_score_rmse": rmse,
-        "checkpoint_score_tail_mae": tail_mae,
-        "checkpoint_tail_mae_lambda": tail_lambda,
     }
 
 

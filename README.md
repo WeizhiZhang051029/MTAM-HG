@@ -33,7 +33,7 @@ This repository provides the official implementation of **MTAM-HG: A Mixture-of-
   <em>Overall framework of MTAM-HG for data augmentation and strip yield strength prediction in continuous annealing production lines.</em>
 </p>
 
-Yield strength is a key quality indicator in continuous annealing production lines (CAPLs), but its accurate prediction remains challenging when production records are limited, strength distributions are long-tailed, and process variables are strongly coupled. Existing data-driven approaches also rarely incorporate process-mechanism constraints or explicitly account for differences among operating conditions.
+Yield strength is a key quality indicator in continuous annealing production lines (CAPLs), but its accurate prediction remains challenging when production records are limited and process variables are strongly coupled. Existing data-driven approaches also rarely incorporate process-mechanism constraints or explicitly account for differences among operating conditions.
 
 To address these challenges, **MTAM-HG** integrates mechanism-prior diffusion augmentation, feedback-driven sample regulation, and heterogeneous graph mixture-of-experts prediction within a unified framework.
 

@@ -71,7 +71,7 @@ def build_mechanistic_prior_graph(
     for source_group, target_group in zip(thermal_stage_chain, thermal_stage_chain[1:]):
         _add_edges(A, node_to_idx, [source_group], [target_group], 0.90)
     _add_edges(A, node_to_idx, hot_history, deformation_targets, 0.90)
-    _add_edges(A, node_to_idx, cooling_variables, ["EL", "RF", "BF"], 0.90)
+    _add_edges(A, node_to_idx, cooling_variables, geometry_nodes, 0.90)
     _add_edges(A, node_to_idx, geometry_nodes, ["RF"], 0.75)
     _add_edges(A, node_to_idx, composition, conditional, 1.00)
 

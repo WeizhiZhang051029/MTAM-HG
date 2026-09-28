@@ -9,6 +9,7 @@ from typing import Sequence
 
 import config
 from protocol_integrity import TABDIFF_DETERMINISTIC_SEED, file_sha256
+from utils.paths import project_path
 
 
 @dataclass(frozen=True)
@@ -20,9 +21,8 @@ class TabDiffCommand:
         return f"(cd {self.cwd} && {' '.join(self.command)})"
 
 
-def project_path(path: str | Path) -> Path:
-    raw = Path(path)
-    return raw if raw.is_absolute() else (config.PROJECT_ROOT / raw)
+def raw_output_path() -> Path:
+    return project_path(getattr(config, "TABDIFF_OUTPUT_DIR", "outputs/tabdiff")) / "synthetic_CAPL_raw.csv"
 
 
 def tabdiff_repo_path(path: str | Path | None = None) -> Path:

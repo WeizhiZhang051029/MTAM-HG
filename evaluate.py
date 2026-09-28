@@ -8,7 +8,7 @@ import torch
 
 import config
 from metrics import compute_metrics
-from losses import prediction_loss
+from losses import _as_output_dict, prediction_loss
 from utils.logger import save_json
 
 
@@ -40,12 +40,6 @@ def _inverse_b(b: np.ndarray, data_bundle) -> np.ndarray:
     return b
 
 
-def _as_output_dict(outputs):
-    if torch.is_tensor(outputs):
-        return {"mu": outputs}
-    return outputs
-
-
 def _safe_pearson(x: np.ndarray, y: np.ndarray) -> float:
     x = np.asarray(x, dtype=float).reshape(-1)
     y = np.asarray(y, dtype=float).reshape(-1)
@@ -65,12 +59,6 @@ def agent_selection_alignment_metrics(diag: pd.DataFrame) -> dict[str, float | i
         return {}
     abs_error = diag["abs_error"].astype(float).to_numpy()
     confidence = diag["sample_confidence"].astype(float).to_numpy()
-    y_true = diag["y_true"].astype(float).to_numpy() if "y_true" in diag else np.array([])
-    tail_mask = np.zeros(len(diag), dtype=bool)
-    if len(y_true):
-        low = float(np.quantile(y_true, 0.10))
-        high = float(np.quantile(y_true, 0.90))
-        tail_mask = (y_true <= low) | (y_true >= high)
     high_error_cutoff = float(np.quantile(abs_error, 0.90)) if len(abs_error) else float("nan")
     high_error_mask = abs_error >= high_error_cutoff if np.isfinite(high_error_cutoff) else np.zeros(len(diag), dtype=bool)
     top_conf_cutoff = float(np.quantile(confidence, 0.80)) if len(confidence) else float("nan")
@@ -86,10 +74,6 @@ def agent_selection_alignment_metrics(diag: pd.DataFrame) -> dict[str, float | i
         "abs_error_mean": float(np.mean(abs_error)),
         "abs_error_p90": high_error_cutoff,
         "top_confidence_abs_error_mean": float(np.mean(abs_error[top_conf_mask])) if bool(top_conf_mask.any()) else float("nan"),
-        "tail_sample_count": int(tail_mask.sum()),
-        "tail_abs_error_mean": float(np.mean(abs_error[tail_mask])) if bool(tail_mask.any()) else float("nan"),
-        "tail_confidence_mean": float(np.mean(confidence[tail_mask])) if bool(tail_mask.any()) else float("nan"),
-        "body_confidence_mean": float(np.mean(confidence[~tail_mask])) if bool((~tail_mask).any()) else float("nan"),
         "high_error_sample_count": int(high_error_mask.sum()),
         "high_error_confidence_mean": float(np.mean(confidence[high_error_mask])) if bool(high_error_mask.any()) else float("nan"),
         "non_high_error_confidence_mean": float(np.mean(confidence[~high_error_mask])) if bool((~high_error_mask).any()) else float("nan"),
@@ -176,7 +160,6 @@ def evaluate_model(model, loader, device: torch.device, data_bundle, *, batch_ob
         collected["y"],
         collected["mu"],
         b=b,
-        tail_thresholds=data_bundle.tail_thresholds,
     )
     return metrics, collected
 

@@ -11,7 +11,6 @@ class SyntheticBundle:
     loader: DataLoader
     frame: pd.DataFrame
     y_raw: np.ndarray
-    is_tail: np.ndarray
     synthetic_source: np.ndarray
     generation_condition: np.ndarray
     process_consistency: np.ndarray

@@ -1,4 +1,4 @@
-"""Fixed-batch CUDA compilation; tail batches and evaluation remain eager."""
+"""Fixed-batch CUDA compilation; evaluation remains eager."""
 
 from __future__ import annotations
 from functools import wraps

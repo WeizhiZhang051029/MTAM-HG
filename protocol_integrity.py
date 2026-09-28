@@ -13,6 +13,7 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
+from utils.paths import project_path
 
 PROVENANCE_FORMAT = "mtam_hg_synthetic_provenance_v2"
 TABDIFF_DETERMINISTIC_SEED = 0
@@ -252,9 +253,6 @@ def generation_config_snapshot() -> dict[str, object]:
         "TABDIFF_FINETUNE_STEPS",
         "TABDIFF_NUM_TIMESTEPS_OVERRIDE",
         "TABDIFF_STOCHASTIC_SAMPLER",
-        "TAIL_THRESHOLD_MODE",
-        "TAIL_QUANTILE_LOW",
-        "TAIL_QUANTILE_HIGH",
     )
     snapshot = {name: getattr(config, name, None) for name in names}
     snapshot["TABDIFF_GENERATION_SEED"] = int(
@@ -268,15 +266,6 @@ def synthetic_provenance_path(synthetic_path: str | Path) -> Path:
 
     path = Path(synthetic_path)
     return path.with_suffix(".provenance.json")
-
-
-def _project_path(path: str | Path) -> Path:
-    raw = Path(path)
-    if raw.is_absolute():
-        return raw.resolve()
-    import config
-
-    return (Path(config.PROJECT_ROOT) / raw).resolve()
 
 
 def validate_prepared_tabdiff_input(metadata_path: str | Path) -> dict[str, object]:
@@ -389,7 +378,7 @@ def _capture_bound_dependency(
     if not raw_path:
         raise SyntheticProvenanceError(f"Synthetic provenance field {path_field!r} is required.")
     try:
-        snapshot = capture_file_snapshot(_project_path(raw_path))
+        snapshot = capture_file_snapshot(project_path(raw_path, resolve=True))
     except FileMutationError as exc:
         raise SyntheticProvenanceError(f"Synthetic provenance {label} was not found: {raw_path}") from exc
     field_name = f"{field_prefix}.{sha256_field}"
@@ -449,7 +438,7 @@ def _validate_common(
     recorded_synthetic_path = str(synthetic.get("path", "") or "").strip()
     if not recorded_synthetic_path:
         raise SyntheticProvenanceError("Synthetic provenance field 'synthetic.path' is required.")
-    _expect_equal("synthetic.path", _project_path(recorded_synthetic_path), resolved_synthetic)
+    _expect_equal("synthetic.path", project_path(recorded_synthetic_path, resolve=True), resolved_synthetic)
     source_snapshot = _capture_bound_dependency(
         source,
         path_field="path",
@@ -458,7 +447,7 @@ def _validate_common(
         label="source data",
     )
     if source_path is not None:
-        _expect_equal("source.path", source_snapshot.path, _project_path(source_path))
+        _expect_equal("source.path", source_snapshot.path, project_path(source_path, resolve=True))
     actual_rows = len(table_snapshot.frame)
     actual_columns = [str(column) for column in table_snapshot.frame.columns]
     _expect_equal("synthetic.rows", actual_rows, synthetic.get("rows"))
@@ -611,7 +600,7 @@ def validate_synthetic_provenance_for_runner(
         total_rows=len(labels),
     )
     result = _validate_common(
-        _project_path(synthetic_path),
+        project_path(synthetic_path, resolve=True),
         source_sha256=source_snapshot.file.sha256,
         source_path=source_snapshot.file.path,
         split_seed=int(split_seed),
@@ -639,7 +628,7 @@ def validate_synthetic_provenance_for_data_bundle(
 ) -> dict[str, object]:
 
     return _validate_common(
-        _project_path(synthetic_path),
+        project_path(synthetic_path, resolve=True),
         source_sha256=str(getattr(data_bundle, "source_sha256")),
         source_path=getattr(data_bundle, "data_path", None),
         split_seed=int(getattr(data_bundle, "split_seed")),

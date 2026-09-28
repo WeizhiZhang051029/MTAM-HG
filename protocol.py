@@ -2,15 +2,22 @@ from __future__ import annotations
 
 import config
 
-DEFAULT_DATA_PATH = "data/CAPL.xlsx"
-DEFAULT_LABEL_COL = "屈服强度"
-DEFAULT_CONFIG_PATH = "configs/mtam_hg.yaml"
-DEFAULT_SYNTHETIC_DATA_PATH = "data/synthetic_CAPL_ma_tabdiff.xlsx"
 
-DEFAULT_SPLIT_SEED = 42
-DEFAULT_SEEDS = list(range(42, 52))
-DEFAULT_SPLIT_METHOD = "stratified_random"
-DEFAULT_GENERATION_SEED = 0
+def str_to_bool(value: str | bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() in {"1", "true", "yes", "y"}
+
+
+DEFAULT_DATA_PATH = config.DATA_PATH
+DEFAULT_LABEL_COL = config.LABEL_COL
+DEFAULT_CONFIG_PATH = "configs/mtam_hg.yaml"
+DEFAULT_SYNTHETIC_DATA_PATH = config.SYNTHETIC_DATA_PATH
+
+DEFAULT_SPLIT_SEED = config.SPLIT_SEED
+DEFAULT_SEEDS = list(range(config.SEED, config.SEED + 10))
+DEFAULT_SPLIT_METHOD = config.SPLIT_METHOD
+DEFAULT_GENERATION_SEED = config.TABDIFF_GENERATION_SEED
 DEFAULT_MAIN_OUTPUT_ROOT = "outputs/mtam_hg"
 
 DEFAULT_EPOCHS = config.EPOCHS
@@ -48,7 +55,6 @@ DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_BINS = config.DYNAMIC_SYNTHETIC_SCARCITY_BINS
 DEFAULT_DYNAMIC_SYNTHETIC_PROCESS_POWER = config.DYNAMIC_SYNTHETIC_PROCESS_POWER
 DEFAULT_DYNAMIC_SYNTHETIC_MECHANISM_POWER = config.DYNAMIC_SYNTHETIC_MECHANISM_POWER
 DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC = config.DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC
-DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_TAIL_LAMBDA = config.DYNAMIC_SYNTHETIC_TRAIN_TAIL_LAMBDA
 
 DEFAULT_USE_CLUSTER_BALANCE_REWARD = config.USE_CLUSTER_BALANCE_REWARD
 DEFAULT_NUM_WORKING_CONDITION_CLUSTERS = config.NUM_WORKING_CONDITION_CLUSTERS
@@ -69,7 +75,6 @@ DEFAULT_MR_LORA_ALPHA_ROUTING = config.MR_LORA_ALPHA_ROUTING
 DEFAULT_MR_LORA_DROPOUT = config.MR_LORA_DROPOUT
 DEFAULT_MR_LORA_TRAIN_OUTPUT_HEAD = config.MR_LORA_TRAIN_OUTPUT_HEAD
 DEFAULT_MAIN_CHECKPOINT_SELECTION_METRIC = config.CHECKPOINT_SELECTION_METRIC
-DEFAULT_MAIN_CHECKPOINT_TAIL_MAE_LAMBDA = config.CHECKPOINT_TAIL_MAE_LAMBDA
 DEFAULT_TABDIFF_NUM_SAMPLES = config.TABDIFF_NUM_SAMPLES
 
 
@@ -105,7 +110,6 @@ DYNAMIC_SYNTHETIC_RUNNER_ARG_SPECS = [
     ("dynamic_synthetic_process_power", "--dynamic_synthetic_process_power"),
     ("dynamic_synthetic_mechanism_power", "--dynamic_synthetic_mechanism_power"),
     ("dynamic_synthetic_train_reward_metric", "--dynamic_synthetic_train_reward_metric"),
-    ("dynamic_synthetic_train_tail_lambda", "--dynamic_synthetic_train_tail_lambda"),
 ]
 
 CLUSTER_BALANCE_ARG_SPECS = [
@@ -139,7 +143,6 @@ MAIN_TRAIN_ARG_SPECS = [
     ("freeze_finetune_backbone", "--freeze_finetune_backbone"),
     ("early_stopping_patience", "--early_stopping_patience"),
     ("checkpoint_selection_metric", "--checkpoint_selection_metric"),
-    ("checkpoint_tail_mae_lambda", "--checkpoint_tail_mae_lambda"),
     *CLUSTER_BALANCE_ARG_SPECS,
 ]
 

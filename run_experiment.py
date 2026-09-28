@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from models.mr_lora import MR_LORA_SCOPE_FAMILIES
+from metrics import REGRESSION_METRIC_NAMES
 from protocol import (
     BOOL_VALUE_FLAGS,
     DEFAULT_BATCH_SIZE,
@@ -30,7 +31,6 @@ from protocol import (
     DEFAULT_DYNAMIC_SYNTHETIC_TOP_RATIO,
     DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REGION_WEIGHT,
     DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC,
-    DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_TAIL_LAMBDA,
     DEFAULT_DYNAMIC_SYNTHETIC_USE_LOSS_WEIGHT,
     DEFAULT_DYNAMIC_SYNTHETIC_USE_SAMPLER,
     DEFAULT_DYNAMIC_SYNTHETIC_WARMUP_EPOCHS,
@@ -47,7 +47,6 @@ from protocol import (
     DEFAULT_LABEL_COL,
     DEFAULT_LR,
     DEFAULT_MAIN_CHECKPOINT_SELECTION_METRIC,
-    DEFAULT_MAIN_CHECKPOINT_TAIL_MAE_LAMBDA,
     DEFAULT_MAIN_OUTPUT_ROOT,
     DEFAULT_MR_LORA_ALPHA_GRAPH,
     DEFAULT_MR_LORA_ALPHA_ROUTING,
@@ -77,16 +76,10 @@ from protocol import (
     MR_LORA_ARG_SPECS,
     SUPERVISED_MAIN_EXPERIMENT_NAME,
     SUPERVISED_MAIN_TRAIN_MODE,
+    str_to_bool,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-PAPER_METRICS = ("RMSE", "MAE", "MAPE", "R2")
-
-def _str_to_bool(value: str | bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    return str(value).lower() in {"1", "true", "yes", "y"}
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the paper-aligned MTAM-HG main experiment.")
@@ -118,8 +111,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no_dynamic_synthetic_agent", dest="use_dynamic_synthetic_agent", action="store_false")
     parser.add_argument("--dynamic_synthetic_refresh_epochs", type=int, default=DEFAULT_DYNAMIC_SYNTHETIC_REFRESH_EPOCHS)
     parser.add_argument("--dynamic_synthetic_warmup_epochs", type=int, default=DEFAULT_DYNAMIC_SYNTHETIC_WARMUP_EPOCHS)
-    parser.add_argument("--dynamic_synthetic_use_sampler", type=_str_to_bool, nargs="?", const=True, default=DEFAULT_DYNAMIC_SYNTHETIC_USE_SAMPLER)
-    parser.add_argument("--dynamic_synthetic_use_loss_weight", type=_str_to_bool, nargs="?", const=True, default=DEFAULT_DYNAMIC_SYNTHETIC_USE_LOSS_WEIGHT)
+    parser.add_argument("--dynamic_synthetic_use_sampler", type=str_to_bool, nargs="?", const=True, default=DEFAULT_DYNAMIC_SYNTHETIC_USE_SAMPLER)
+    parser.add_argument("--dynamic_synthetic_use_loss_weight", type=str_to_bool, nargs="?", const=True, default=DEFAULT_DYNAMIC_SYNTHETIC_USE_LOSS_WEIGHT)
     parser.add_argument("--dynamic_synthetic_top_ratio", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_TOP_RATIO)
     parser.add_argument("--dynamic_synthetic_weight_min", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_WEIGHT_MIN)
     parser.add_argument("--dynamic_synthetic_weight_max", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_WEIGHT_MAX)
@@ -135,8 +128,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dynamic_synthetic_scarcity_bins", type=int, default=DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_BINS)
     parser.add_argument("--dynamic_synthetic_process_power", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_PROCESS_POWER)
     parser.add_argument("--dynamic_synthetic_mechanism_power", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_MECHANISM_POWER)
-    parser.add_argument("--dynamic_synthetic_train_reward_metric", choices=["rmse", "mae", "rmse_tail"], default=DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC)
-    parser.add_argument("--dynamic_synthetic_train_tail_lambda", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_TAIL_LAMBDA)
+    parser.add_argument("--dynamic_synthetic_train_reward_metric", choices=["rmse", "mae"], default=DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC)
     parser.add_argument("--use_cluster_balance_reward", action="store_true", default=DEFAULT_USE_CLUSTER_BALANCE_REWARD)
     parser.add_argument("--no_cluster_balance_reward", dest="use_cluster_balance_reward", action="store_false")
     parser.add_argument("--num_working_condition_clusters", type=int, default=DEFAULT_NUM_WORKING_CONDITION_CLUSTERS)
@@ -176,10 +168,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--early_stopping_patience", type=int, default=DEFAULT_EARLY_STOPPING_PATIENCE)
     parser.add_argument(
         "--checkpoint_selection_metric",
-        choices=["rmse", "rmse_tail"],
+        choices=["rmse"],
         default=DEFAULT_MAIN_CHECKPOINT_SELECTION_METRIC,
     )
-    parser.add_argument("--checkpoint_tail_mae_lambda", type=float, default=DEFAULT_MAIN_CHECKPOINT_TAIL_MAE_LAMBDA)
     parser.add_argument("--split_method", choices=["stratified_random", "chronological"], default=DEFAULT_SPLIT_METHOD)
     parser.add_argument("--tabdiff_num_samples", type=int, default=None)
     parser.add_argument("--tabdiff_gpu", type=int, default=None)
@@ -254,11 +245,6 @@ def validate_args(args: argparse.Namespace) -> None:
             raise ValueError(f"--{name} must be in [0, 1], got {value}.")
     if int(args.early_stopping_patience) <= 0:
         raise ValueError(f"--early_stopping_patience must be positive, got {args.early_stopping_patience}.")
-    if float(args.checkpoint_tail_mae_lambda) < 0:
-        raise ValueError(
-            "--checkpoint_tail_mae_lambda must be non-negative, "
-            f"got {args.checkpoint_tail_mae_lambda}."
-        )
     finetune_lrs = {
         "finetune_backbone_lr": args.finetune_backbone_lr,
         "finetune_head_lr": args.finetune_head_lr,
@@ -295,7 +281,6 @@ def validate_args(args: argparse.Namespace) -> None:
         "dynamic_synthetic_quota_max": args.dynamic_synthetic_quota_max,
         "dynamic_synthetic_process_power": args.dynamic_synthetic_process_power,
         "dynamic_synthetic_mechanism_power": args.dynamic_synthetic_mechanism_power,
-        "dynamic_synthetic_train_tail_lambda": args.dynamic_synthetic_train_tail_lambda,
         "cluster_balance_lambda": args.cluster_balance_lambda,
         "reward_alpha_cluster": args.reward_alpha_cluster,
     }
@@ -465,7 +450,7 @@ def run_experiments(args: argparse.Namespace) -> None:
         metrics = json.loads(paths[0].read_text(encoding="utf-8"))
         if metrics.get("Seed") != seed or metrics.get("Split_Seed") != seed:
             raise RuntimeError("Run and split seeds do not match.")
-        if not all(math.isfinite(float(metrics[m])) for m in PAPER_METRICS):
+        if not all(math.isfinite(float(metrics[m])) for m in REGRESSION_METRIC_NAMES):
             raise RuntimeError(f"Non-finite evaluation metric for seed {seed}.")
         results.append({"seed": seed, "metrics": metrics, "metrics_path": str(paths[0])})
     summary = {
@@ -480,7 +465,7 @@ def run_experiments(args: argparse.Namespace) -> None:
                 "mean": float(np.mean([run["metrics"][metric] for run in results])),
                 "std": float(np.std([run["metrics"][metric] for run in results], ddof=1)) if len(results) > 1 else None,
             }
-            for metric in PAPER_METRICS
+            for metric in REGRESSION_METRIC_NAMES
         } if results else {},
     }
     root.mkdir(parents=True, exist_ok=True)
