@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import config
+from losses import moe_load_balance_loss
 from models.ipohgn import IPOHGNExpert
 
 FOUR_EXPERT_NAMES = list(config.NODE_TYPES)
@@ -32,35 +33,18 @@ def router_load_balance_loss(
     gate_probs: torch.Tensor | None = None,
     balance_coefficients: tuple[float, float, float] | None = None,
 ) -> torch.Tensor:
-    """Balance sparse expert usage while keeping soft gate probabilities exploratory."""
-    num_experts = gate_weights.shape[-1]
-    uniform = gate_weights.new_full((num_experts,), 1.0 / num_experts)
-
-    importance = gate_weights.sum(dim=0)
-    importance = importance / (importance.sum() + 1.0e-8)
-    importance_loss = ((importance - uniform) ** 2).mean()
-
-    load = gate_weights.mean(dim=0)
-    load_loss = ((load - uniform) ** 2).mean()
-    sparse_balance = importance_loss + load_loss
-
-    prob_balance = gate_weights.new_tensor(0.0)
-    entropy_reg = gate_weights.new_tensor(0.0)
-    if gate_probs is not None:
-        prob_importance = gate_probs.mean(dim=0)
-        prob_balance = ((prob_importance - uniform) ** 2).mean()
-        entropy = -(gate_probs * torch.log(gate_probs + 1.0e-8)).sum(dim=-1).mean()
-        max_entropy = torch.log(gate_probs.new_tensor(float(num_experts)))
-        entropy_reg = (max_entropy - entropy) / (max_entropy + 1.0e-8)
-
+    """调用统一的专家均衡损失实现。"""
     if balance_coefficients is None:
         balance_coefficients = (
             float(_cfg("MOE_BALANCE_USAGE_LAMBDA", 1.0)),
             float(_cfg("MOE_BALANCE_PROB_LAMBDA", 0.5)),
             float(_cfg("MOE_ENTROPY_REG_LAMBDA", 0.01)),
         )
-    usage, probability, entropy_weight = balance_coefficients
-    return usage * sparse_balance + probability * prob_balance + entropy_weight * entropy_reg
+    return moe_load_balance_loss(
+        [gate_weights],
+        gate_probs=gate_probs,
+        balance_coefficients=balance_coefficients,
+    )
 
 
 def _topk_sparse_weights(
@@ -133,10 +117,8 @@ class ReliabilityAwareRouter(nn.Module):
         )
         self.routing_head = nn.Linear(hidden_dim, num_experts)
         self.confidence_head = nn.Sequential(nn.Linear(hidden_dim, 1), nn.Sigmoid())
-        # Keep the public output names for downstream diagnostics, but use one
-        # canonical sample-quality signal instead of three independent heads.
-        self.synthetic_keep_head = self.confidence_head
-        self.training_weight_head = self.confidence_head
+        self.synthetic_keep_head = nn.Sequential(nn.Linear(hidden_dim, 1), nn.Sigmoid())
+        self.training_weight_head = nn.Sequential(nn.Linear(hidden_dim, 1), nn.Sigmoid())
         self.expert_reliability_head = nn.Sequential(nn.Linear(hidden_dim, num_experts), nn.Sigmoid())
         self.uncertainty_reason_head = nn.Sequential(nn.Linear(hidden_dim, self.reason_dim), nn.Sigmoid())
 
@@ -182,9 +164,8 @@ class ReliabilityAwareRouter(nn.Module):
                 device=global_hidden.device,
                 dtype=global_hidden.dtype,
             )
-        # The confidence head is the canonical sample-quality signal.
-        synthetic_keep_score = sample_confidence
-        training_weight = sample_confidence
+        synthetic_keep_score = self.synthetic_keep_head(encoded)
+        training_weight = self.training_weight_head(encoded)
         uncertainty_reason_vector = self.uncertainty_reason_head(encoded)
         entropy = -(gate_probs * torch.log(gate_probs + 1.0e-8)).sum(dim=-1)
         return {
@@ -317,34 +298,8 @@ class MTAMHG(nn.Module):
         y_pred = (expert_preds * expert_weights.unsqueeze(-1)).sum(dim=1)
 
         aux_loss = router_load_balance_loss(expert_weights, gate_out["gate_probs"], self.balance_coefficients)
-        expert_weight_forward = expert_weights.detach()
-        expert_usage = expert_weight_forward.mean(dim=0).detach()
-        debug: dict[str, object] = {
-            "model": "mtam_hg",
-            "expert_names": self.expert_names,
-            "mechanism_node_groups": MECHANISM_EXPERT_NODE_GROUPS,
-            "top_k": self.top_k,
-            "num_experts": self.num_experts,
-            "aux_lambda": self.aux_lambda,
-            "expert_usage": expert_usage,
-            "expert_selected_rate": (expert_weight_forward > 0).float().mean(dim=0).detach(),
-            "expert_weight_mean": expert_usage,
-        }
-        if "sample_confidence" in gate_out:
-            debug["sample_confidence_mean"] = gate_out["sample_confidence"].detach().mean()
-        if "synthetic_keep_score" in gate_out:
-            debug["synthetic_keep_score_mean"] = gate_out["synthetic_keep_score"].detach().mean()
-        if "training_weight" in gate_out:
-            debug["training_weight_mean"] = gate_out["training_weight"].detach().mean()
-        if "expert_reliability" in gate_out:
-            debug["expert_reliability_mean"] = gate_out["expert_reliability"].detach().mean()
-        if "expert_uncertainty" in gate_out:
-            debug["expert_uncertainty_mean"] = gate_out["expert_uncertainty"].detach().mean()
-        if "agent_gate_entropy" in gate_out:
-            debug["agent_gate_entropy"] = gate_out["agent_gate_entropy"].detach().mean()
-        outputs: dict[str, torch.Tensor | list[torch.Tensor] | dict[str, object]] = {
+        outputs: dict[str, torch.Tensor | list[torch.Tensor]] = {
             "mu": y_pred,
-            "y_pred": y_pred,
             "expert_preds": expert_preds,
             "expert_weights": expert_weights,
             "gate_probs": gate_out["gate_probs"],
@@ -357,7 +312,6 @@ class MTAMHG(nn.Module):
             "A_kg": expert_outputs[0]["A_kg"],
             "A_kg_experts": expert_A_kg,
             "A_het": expert_outputs[0]["A_het"],
-            "A_hat": expert_outputs[0]["A_hat"],
             "A0": expert_outputs[0]["A0"],
             "A0_experts": expert_A0,
             "mechanism_masks": self.mechanism_masks,
@@ -365,7 +319,6 @@ class MTAMHG(nn.Module):
                 [out["mechanism_focus_mask"] for out in expert_outputs],
                 dim=0,
             ),
-            "debug": debug,
         }
         if "process_order_ids" in expert_outputs[0]:
             outputs["process_order_ids"] = expert_outputs[0]["process_order_ids"]

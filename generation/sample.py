@@ -76,7 +76,6 @@ def run_tabdiff_sample(
         ds_name,
         previous_snapshot=previous_snapshot,
     )
-    assert_file_snapshot_current(checkpoint_snapshot, "TabDiff sampling checkpoint")
     result["copied_from_official_output"] = str(copied)
     return result
 

@@ -14,7 +14,6 @@ import config
 from evaluate import evaluate_model, evaluate_model_and_loss
 from losses import (
     batch_agent_reward_enabled,
-    prediction_loss,
     total_loss,
 )
 from models.mr_lora import inject_mr_lora, mr_lora_parameter_names, mr_lora_scope_families
@@ -309,20 +308,6 @@ def train_one_epoch(
     return {key: value / max(len(train_loader), 1) for key, value in accum.items()}
 
 
-@torch.no_grad()
-def evaluate_prediction_loss(model, loader, device: torch.device) -> float:
-    model.eval()
-    total = 0.0
-    count = 0
-    for batch in loader:
-        x, y = batch[0].to(device), batch[1].to(device)
-        outputs = model(x)
-        loss = prediction_loss(outputs, y, weights=None)
-        total += float(loss.detach().cpu()) * x.shape[0]
-        count += int(x.shape[0])
-    return total / max(count, 1)
-
-
 def split_metadata(data_bundle) -> dict[str, object]:
 
     return {
@@ -432,7 +417,6 @@ def supervised_finetune(
 ) -> tuple[float, int, int, bool]:
     if (quality_agent is None) != (quality_agent_calibration_fn is None):
         raise ValueError("quality_agent and quality_agent_calibration_fn must be provided together.")
-    save_split_artifacts(data_bundle, config.RESULT_DIR)
     epochs = config.EPOCHS if epochs is None else epochs
     mr_lora_summary = maybe_enable_mr_lora(model, device=device)
     finetune_policy = configure_finetune_trainability(model, freeze_backbone=freeze_backbone)

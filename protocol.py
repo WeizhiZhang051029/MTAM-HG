@@ -14,7 +14,6 @@ DEFAULT_LABEL_COL = config.LABEL_COL
 DEFAULT_CONFIG_PATH = "configs/mtam_hg.yaml"
 DEFAULT_SYNTHETIC_DATA_PATH = config.SYNTHETIC_DATA_PATH
 
-DEFAULT_SPLIT_SEED = config.SPLIT_SEED
 DEFAULT_SEEDS = list(range(config.SEED, config.SEED + 10))
 DEFAULT_SPLIT_METHOD = config.SPLIT_METHOD
 DEFAULT_GENERATION_SEED = config.TABDIFF_GENERATION_SEED
@@ -41,22 +40,12 @@ DEFAULT_DYNAMIC_SYNTHETIC_USE_LOSS_WEIGHT = config.DYNAMIC_SYNTHETIC_USE_LOSS_WE
 DEFAULT_DYNAMIC_SYNTHETIC_TOP_RATIO = config.DYNAMIC_SYNTHETIC_TOP_RATIO
 DEFAULT_DYNAMIC_SYNTHETIC_WEIGHT_MIN = config.DYNAMIC_SYNTHETIC_WEIGHT_MIN
 DEFAULT_DYNAMIC_SYNTHETIC_WEIGHT_MAX = config.DYNAMIC_SYNTHETIC_WEIGHT_MAX
-DEFAULT_DYNAMIC_SYNTHETIC_EMA = config.DYNAMIC_SYNTHETIC_EMA
-DEFAULT_DYNAMIC_SYNTHETIC_ERROR_WEIGHT = config.DYNAMIC_SYNTHETIC_ERROR_WEIGHT
-DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REGION_WEIGHT = config.DYNAMIC_SYNTHETIC_TRAIN_REGION_WEIGHT
-DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_WEIGHT = config.DYNAMIC_SYNTHETIC_SCARCITY_WEIGHT
-DEFAULT_DYNAMIC_SYNTHETIC_REAL_FEEDBACK_WEIGHT = config.DYNAMIC_SYNTHETIC_REAL_FEEDBACK_WEIGHT
-DEFAULT_DYNAMIC_SYNTHETIC_QUOTA_STRENGTH = config.DYNAMIC_SYNTHETIC_QUOTA_STRENGTH
-DEFAULT_DYNAMIC_SYNTHETIC_QUOTA_MIN = config.DYNAMIC_SYNTHETIC_QUOTA_MIN
-DEFAULT_DYNAMIC_SYNTHETIC_QUOTA_MAX = config.DYNAMIC_SYNTHETIC_QUOTA_MAX
-DEFAULT_DYNAMIC_SYNTHETIC_RELIABILITY_FLOOR = config.DYNAMIC_SYNTHETIC_RELIABILITY_FLOOR
 DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_BINS = config.DYNAMIC_SYNTHETIC_SCARCITY_BINS
 DEFAULT_DYNAMIC_SYNTHETIC_PROCESS_POWER = config.DYNAMIC_SYNTHETIC_PROCESS_POWER
 DEFAULT_DYNAMIC_SYNTHETIC_MECHANISM_POWER = config.DYNAMIC_SYNTHETIC_MECHANISM_POWER
 
 DEFAULT_USE_CLUSTER_BALANCE_REWARD = config.USE_CLUSTER_BALANCE_REWARD
 DEFAULT_NUM_WORKING_CONDITION_CLUSTERS = config.NUM_WORKING_CONDITION_CLUSTERS
-DEFAULT_CLUSTER_BALANCE_LAMBDA = config.CLUSTER_BALANCE_LAMBDA
 DEFAULT_REWARD_ALPHA_CLUSTER = config.REWARD_ALPHA_CLUSTER
 
 DEFAULT_FINETUNE_BACKBONE_LR = config.FINETUNE_BACKBONE_LR
@@ -77,11 +66,7 @@ DEFAULT_TABDIFF_NUM_SAMPLES = config.TABDIFF_NUM_SAMPLES
 
 
 SUPERVISED_MAIN_TRAIN_MODE = "train_with_tabdiff_pretrain"
-DEFAULT_MAIN_TRAIN_MODE = SUPERVISED_MAIN_TRAIN_MODE
 SUPERVISED_MAIN_EXPERIMENT_NAME = "mtam_hg_paper"
-MAIN_EXPERIMENT_NAMES = {SUPERVISED_MAIN_EXPERIMENT_NAME}
-MAIN_EXPERIMENT_MODEL = "mtam_hg"
-MAIN_MODEL_ALIAS = "mtam_hg"
 
 MAIN_PY_MODE_CHOICES = (
     "evaluate",
@@ -99,11 +84,6 @@ DYNAMIC_SYNTHETIC_RUNNER_ARG_SPECS = [
     ("dynamic_synthetic_top_ratio", "--dynamic_synthetic_top_ratio"),
     ("dynamic_synthetic_weight_min", "--dynamic_synthetic_weight_min"),
     ("dynamic_synthetic_weight_max", "--dynamic_synthetic_weight_max"),
-    ("dynamic_synthetic_ema", "--dynamic_synthetic_ema"),
-    ("dynamic_synthetic_error_weight", "--dynamic_synthetic_error_weight"),
-    ("dynamic_synthetic_train_region_weight", "--dynamic_synthetic_train_region_weight"),
-    ("dynamic_synthetic_scarcity_weight", "--dynamic_synthetic_scarcity_weight"),
-    ("dynamic_synthetic_reliability_floor", "--dynamic_synthetic_reliability_floor"),
     ("dynamic_synthetic_scarcity_bins", "--dynamic_synthetic_scarcity_bins"),
     ("dynamic_synthetic_process_power", "--dynamic_synthetic_process_power"),
     ("dynamic_synthetic_mechanism_power", "--dynamic_synthetic_mechanism_power"),
@@ -112,7 +92,6 @@ DYNAMIC_SYNTHETIC_RUNNER_ARG_SPECS = [
 CLUSTER_BALANCE_ARG_SPECS = [
     ("use_cluster_balance_reward", "--use_cluster_balance_reward"),
     ("num_working_condition_clusters", "--num_working_condition_clusters"),
-    ("cluster_balance_lambda", "--cluster_balance_lambda"),
     ("reward_alpha_cluster", "--reward_alpha_cluster"),
 ]
 
@@ -126,10 +105,6 @@ MAIN_TRAIN_ARG_SPECS = [
     ("synthetic_agent_attention_heads", "--synthetic_agent_attention_heads"),
     ("synthetic_agent_dropout", "--synthetic_agent_dropout"),
     *DYNAMIC_SYNTHETIC_RUNNER_ARG_SPECS,
-    ("dynamic_synthetic_real_feedback_weight", "--dynamic_synthetic_real_feedback_weight"),
-    ("dynamic_synthetic_quota_strength", "--dynamic_synthetic_quota_strength"),
-    ("dynamic_synthetic_quota_min", "--dynamic_synthetic_quota_min"),
-    ("dynamic_synthetic_quota_max", "--dynamic_synthetic_quota_max"),
     ("finetune_backbone_lr", "--finetune_backbone_lr"),
     ("finetune_head_lr", "--finetune_head_lr"),
     ("finetune_agent_lr", "--finetune_agent_lr"),

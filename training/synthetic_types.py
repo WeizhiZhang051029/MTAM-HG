@@ -37,16 +37,11 @@ class DynamicSyntheticState:
     weights: np.ndarray
     selected_indices: np.ndarray
     selected_mask: np.ndarray
-    previous_raw_weights: np.ndarray
     scarcity_bonus: np.ndarray
     bin_ids: np.ndarray
-    bin_edges: np.ndarray
-    train_bin_counts: np.ndarray
     feedback_features: np.ndarray
     feedback_target: np.ndarray
     previous_train_score: float | None = None
-    previous_bin_scores: np.ndarray | None = None
     refresh_count: int = 0
     cluster_ids: np.ndarray | None = None
-    previous_cluster_rmse: np.ndarray | None = None
     feedback_history: list[np.ndarray] = field(default_factory=list)

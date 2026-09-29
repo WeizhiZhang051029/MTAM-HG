@@ -7,29 +7,21 @@ import subprocess
 import sys
 from pathlib import Path
 
-from models.mr_lora import MR_LORA_SCOPE_FAMILIES
+import numpy as np
+
 from metrics import REGRESSION_METRIC_NAMES
+from pipeline import build_parser as build_pipeline_parser
 from protocol import (
     BOOL_VALUE_FLAGS,
     DEFAULT_BATCH_SIZE,
-    DEFAULT_CLUSTER_BALANCE_LAMBDA,
     DEFAULT_CONFIG_PATH,
     DEFAULT_DATA_PATH,
     DEFAULT_DROPOUT,
-    DEFAULT_DYNAMIC_SYNTHETIC_EMA,
-    DEFAULT_DYNAMIC_SYNTHETIC_ERROR_WEIGHT,
     DEFAULT_DYNAMIC_SYNTHETIC_MECHANISM_POWER,
     DEFAULT_DYNAMIC_SYNTHETIC_PROCESS_POWER,
-    DEFAULT_DYNAMIC_SYNTHETIC_QUOTA_MAX,
-    DEFAULT_DYNAMIC_SYNTHETIC_QUOTA_MIN,
-    DEFAULT_DYNAMIC_SYNTHETIC_QUOTA_STRENGTH,
-    DEFAULT_DYNAMIC_SYNTHETIC_REAL_FEEDBACK_WEIGHT,
     DEFAULT_DYNAMIC_SYNTHETIC_REFRESH_EPOCHS,
-    DEFAULT_DYNAMIC_SYNTHETIC_RELIABILITY_FLOOR,
     DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_BINS,
-    DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_WEIGHT,
     DEFAULT_DYNAMIC_SYNTHETIC_TOP_RATIO,
-    DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REGION_WEIGHT,
     DEFAULT_DYNAMIC_SYNTHETIC_USE_LOSS_WEIGHT,
     DEFAULT_DYNAMIC_SYNTHETIC_USE_SAMPLER,
     DEFAULT_DYNAMIC_SYNTHETIC_WARMUP_EPOCHS,
@@ -74,101 +66,75 @@ from protocol import (
     MR_LORA_ARG_SPECS,
     SUPERVISED_MAIN_EXPERIMENT_NAME,
     SUPERVISED_MAIN_TRAIN_MODE,
-    str_to_bool,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+RUNNER_SUMMARY_NAME = "run_summary.json"
+
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the paper-aligned MTAM-HG main experiment.")
-    parser.add_argument("--data_path", default=DEFAULT_DATA_PATH)
-    parser.add_argument("--label_col", default=DEFAULT_LABEL_COL)
-    parser.add_argument("--synthetic_data_path", default=DEFAULT_SYNTHETIC_DATA_PATH)
-    parser.add_argument("--config", default=DEFAULT_CONFIG_PATH)
+    parser = build_pipeline_parser()
+    parser.set_defaults(
+        config=DEFAULT_CONFIG_PATH,
+        data_path=DEFAULT_DATA_PATH,
+        label_col=DEFAULT_LABEL_COL,
+        synthetic_data_path=DEFAULT_SYNTHETIC_DATA_PATH,
+        output_dir="",
+        experiment_name="",
+        seeds=DEFAULT_SEEDS,
+        output_root=DEFAULT_MAIN_OUTPUT_ROOT,
+        main_experiment_name="",
+        generation_seed=DEFAULT_GENERATION_SEED,
+        epochs=DEFAULT_EPOCHS,
+        synthetic_pretrain_epochs=DEFAULT_SYNTHETIC_PRETRAIN_EPOCHS,
+        synthetic_agent_epochs=DEFAULT_SYNTHETIC_AGENT_EPOCHS,
+        synthetic_agent_lr=DEFAULT_SYNTHETIC_AGENT_LR,
+        synthetic_agent_hidden_dim=DEFAULT_SYNTHETIC_AGENT_HIDDEN_DIM,
+        synthetic_agent_attention_dim=DEFAULT_SYNTHETIC_AGENT_ATTENTION_DIM,
+        synthetic_agent_attention_heads=DEFAULT_SYNTHETIC_AGENT_ATTENTION_HEADS,
+        dropout=DEFAULT_DROPOUT,
+        agent_dropout=DEFAULT_DROPOUT,
+        synthetic_agent_dropout=DEFAULT_DROPOUT,
+        use_dynamic_synthetic_agent=DEFAULT_USE_DYNAMIC_SYNTHETIC_AGENT,
+        dynamic_synthetic_refresh_epochs=DEFAULT_DYNAMIC_SYNTHETIC_REFRESH_EPOCHS,
+        dynamic_synthetic_warmup_epochs=DEFAULT_DYNAMIC_SYNTHETIC_WARMUP_EPOCHS,
+        dynamic_synthetic_use_sampler=DEFAULT_DYNAMIC_SYNTHETIC_USE_SAMPLER,
+        dynamic_synthetic_use_loss_weight=DEFAULT_DYNAMIC_SYNTHETIC_USE_LOSS_WEIGHT,
+        dynamic_synthetic_top_ratio=DEFAULT_DYNAMIC_SYNTHETIC_TOP_RATIO,
+        dynamic_synthetic_weight_min=DEFAULT_DYNAMIC_SYNTHETIC_WEIGHT_MIN,
+        dynamic_synthetic_weight_max=DEFAULT_DYNAMIC_SYNTHETIC_WEIGHT_MAX,
+        dynamic_synthetic_scarcity_bins=DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_BINS,
+        dynamic_synthetic_process_power=DEFAULT_DYNAMIC_SYNTHETIC_PROCESS_POWER,
+        dynamic_synthetic_mechanism_power=DEFAULT_DYNAMIC_SYNTHETIC_MECHANISM_POWER,
+        use_cluster_balance_reward=DEFAULT_USE_CLUSTER_BALANCE_REWARD,
+        num_working_condition_clusters=DEFAULT_NUM_WORKING_CONDITION_CLUSTERS,
+        reward_alpha_cluster=DEFAULT_REWARD_ALPHA_CLUSTER,
+        finetune_backbone_lr=DEFAULT_FINETUNE_BACKBONE_LR,
+        finetune_head_lr=DEFAULT_FINETUNE_HEAD_LR,
+        finetune_agent_lr=DEFAULT_FINETUNE_AGENT_LR,
+        finetune_quality_agent_lr=DEFAULT_FINETUNE_QUALITY_AGENT_LR,
+        use_layerwise_finetune_lr=True,
+        freeze_finetune_backbone=DEFAULT_FREEZE_FINETUNE_BACKBONE,
+        use_mr_lora=DEFAULT_USE_MR_LORA,
+        mr_lora_scope=DEFAULT_MR_LORA_SCOPE,
+        mr_lora_rank_graph=DEFAULT_MR_LORA_RANK_GRAPH,
+        mr_lora_rank_routing=DEFAULT_MR_LORA_RANK_ROUTING,
+        mr_lora_alpha_graph=DEFAULT_MR_LORA_ALPHA_GRAPH,
+        mr_lora_alpha_routing=DEFAULT_MR_LORA_ALPHA_ROUTING,
+        mr_lora_dropout=DEFAULT_MR_LORA_DROPOUT,
+        mr_lora_train_output_head=DEFAULT_MR_LORA_TRAIN_OUTPUT_HEAD,
+        batch_size=DEFAULT_BATCH_SIZE,
+        lr=DEFAULT_LR,
+        weight_decay=DEFAULT_WEIGHT_DECAY,
+        early_stopping_patience=DEFAULT_EARLY_STOPPING_PATIENCE,
+        checkpoint_selection_metric=DEFAULT_MAIN_CHECKPOINT_SELECTION_METRIC,
+        split_method=DEFAULT_SPLIT_METHOD,
+        tabdiff_num_samples=None,
+        tabdiff_gpu=None,
+    )
     parser.add_argument("--output_root", default=DEFAULT_MAIN_OUTPUT_ROOT)
-    parser.add_argument(
-        "--main_experiment_name",
-        default="",
-        help="Optional final training experiment name; defaults to the configured model name.",
-    )
+    parser.add_argument("--main_experiment_name", default="")
     parser.add_argument("--seeds", nargs="+", type=int, default=DEFAULT_SEEDS)
-    parser.add_argument("--generation_seed", type=int, default=DEFAULT_GENERATION_SEED)
-    parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
-    parser.add_argument("--synthetic_pretrain_epochs", type=int, default=DEFAULT_SYNTHETIC_PRETRAIN_EPOCHS)
-    parser.add_argument("--synthetic_agent_epochs", type=int, default=DEFAULT_SYNTHETIC_AGENT_EPOCHS)
-    parser.add_argument("--synthetic_agent_lr", type=float, default=DEFAULT_SYNTHETIC_AGENT_LR)
-    parser.add_argument("--synthetic_agent_hidden_dim", type=int, default=DEFAULT_SYNTHETIC_AGENT_HIDDEN_DIM)
-    parser.add_argument("--synthetic_agent_attention_dim", type=int, default=DEFAULT_SYNTHETIC_AGENT_ATTENTION_DIM)
-    parser.add_argument("--synthetic_agent_attention_heads", type=int, default=DEFAULT_SYNTHETIC_AGENT_ATTENTION_HEADS)
-    parser.add_argument("--dropout", type=float, default=DEFAULT_DROPOUT)
-    parser.add_argument("--agent_dropout", type=float, default=DEFAULT_DROPOUT)
-    parser.add_argument("--synthetic_agent_dropout", type=float, default=DEFAULT_DROPOUT)
-    parser.add_argument("--use_dynamic_synthetic_agent", action="store_true", default=DEFAULT_USE_DYNAMIC_SYNTHETIC_AGENT)
-    parser.add_argument("--no_dynamic_synthetic_agent", dest="use_dynamic_synthetic_agent", action="store_false")
-    parser.add_argument("--dynamic_synthetic_refresh_epochs", type=int, default=DEFAULT_DYNAMIC_SYNTHETIC_REFRESH_EPOCHS)
-    parser.add_argument("--dynamic_synthetic_warmup_epochs", type=int, default=DEFAULT_DYNAMIC_SYNTHETIC_WARMUP_EPOCHS)
-    parser.add_argument("--dynamic_synthetic_use_sampler", type=str_to_bool, nargs="?", const=True, default=DEFAULT_DYNAMIC_SYNTHETIC_USE_SAMPLER)
-    parser.add_argument("--dynamic_synthetic_use_loss_weight", type=str_to_bool, nargs="?", const=True, default=DEFAULT_DYNAMIC_SYNTHETIC_USE_LOSS_WEIGHT)
-    parser.add_argument("--dynamic_synthetic_top_ratio", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_TOP_RATIO)
-    parser.add_argument("--dynamic_synthetic_weight_min", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_WEIGHT_MIN)
-    parser.add_argument("--dynamic_synthetic_weight_max", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_WEIGHT_MAX)
-    parser.add_argument("--dynamic_synthetic_ema", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_EMA)
-    parser.add_argument("--dynamic_synthetic_error_weight", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_ERROR_WEIGHT)
-    parser.add_argument("--dynamic_synthetic_train_region_weight", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REGION_WEIGHT)
-    parser.add_argument("--dynamic_synthetic_scarcity_weight", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_WEIGHT)
-    parser.add_argument("--dynamic_synthetic_real_feedback_weight", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_REAL_FEEDBACK_WEIGHT)
-    parser.add_argument("--dynamic_synthetic_quota_strength", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_QUOTA_STRENGTH)
-    parser.add_argument("--dynamic_synthetic_quota_min", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_QUOTA_MIN)
-    parser.add_argument("--dynamic_synthetic_quota_max", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_QUOTA_MAX)
-    parser.add_argument("--dynamic_synthetic_reliability_floor", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_RELIABILITY_FLOOR)
-    parser.add_argument("--dynamic_synthetic_scarcity_bins", type=int, default=DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_BINS)
-    parser.add_argument("--dynamic_synthetic_process_power", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_PROCESS_POWER)
-    parser.add_argument("--dynamic_synthetic_mechanism_power", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_MECHANISM_POWER)
-    parser.add_argument("--use_cluster_balance_reward", action="store_true", default=DEFAULT_USE_CLUSTER_BALANCE_REWARD)
-    parser.add_argument("--no_cluster_balance_reward", dest="use_cluster_balance_reward", action="store_false")
-    parser.add_argument("--num_working_condition_clusters", type=int, default=DEFAULT_NUM_WORKING_CONDITION_CLUSTERS)
-    parser.add_argument("--cluster_balance_lambda", type=float, default=DEFAULT_CLUSTER_BALANCE_LAMBDA)
-    parser.add_argument("--reward_alpha_cluster", type=float, default=DEFAULT_REWARD_ALPHA_CLUSTER)
-    parser.add_argument("--finetune_backbone_lr", type=float, default=DEFAULT_FINETUNE_BACKBONE_LR)
-    parser.add_argument("--finetune_head_lr", type=float, default=DEFAULT_FINETUNE_HEAD_LR)
-    parser.add_argument("--finetune_agent_lr", type=float, default=DEFAULT_FINETUNE_AGENT_LR)
-    parser.add_argument("--finetune_quality_agent_lr", type=float, default=DEFAULT_FINETUNE_QUALITY_AGENT_LR)
-    parser.add_argument("--use_layerwise_finetune_lr", action="store_true", default=True)
-    parser.add_argument("--no_layerwise_finetune_lr", dest="use_layerwise_finetune_lr", action="store_false")
-    parser.add_argument("--freeze_finetune_backbone", action="store_true", default=DEFAULT_FREEZE_FINETUNE_BACKBONE)
-    parser.add_argument("--no_freeze_finetune_backbone", dest="freeze_finetune_backbone", action="store_false")
-    parser.add_argument("--use_mr_lora", dest="use_mr_lora", action="store_true", default=DEFAULT_USE_MR_LORA)
-    parser.add_argument("--no_mr_lora", dest="use_mr_lora", action="store_false")
-    parser.add_argument(
-        "--mr_lora_scope",
-        choices=list(MR_LORA_SCOPE_FAMILIES),
-        default=DEFAULT_MR_LORA_SCOPE,
-        help="MR-LoRA adapter families; the paper-main setting is graph_attention_routing.",
-    )
-    parser.add_argument("--mr_lora_rank_graph", type=int, default=DEFAULT_MR_LORA_RANK_GRAPH)
-    parser.add_argument("--mr_lora_rank_routing", type=int, default=DEFAULT_MR_LORA_RANK_ROUTING)
-    parser.add_argument("--mr_lora_alpha_graph", type=float, default=DEFAULT_MR_LORA_ALPHA_GRAPH)
-    parser.add_argument("--mr_lora_alpha_routing", type=float, default=DEFAULT_MR_LORA_ALPHA_ROUTING)
-    parser.add_argument("--mr_lora_dropout", type=float, default=DEFAULT_MR_LORA_DROPOUT)
-    parser.add_argument(
-        "--mr_lora_train_output_head",
-        dest="mr_lora_train_output_head",
-        action="store_true",
-        default=DEFAULT_MR_LORA_TRAIN_OUTPUT_HEAD,
-    )
-    parser.add_argument("--no_mr_lora_train_output_head", dest="mr_lora_train_output_head", action="store_false")
-    parser.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
-    parser.add_argument("--lr", type=float, default=DEFAULT_LR)
-    parser.add_argument("--weight_decay", type=float, default=DEFAULT_WEIGHT_DECAY)
-    parser.add_argument("--early_stopping_patience", type=int, default=DEFAULT_EARLY_STOPPING_PATIENCE)
-    parser.add_argument(
-        "--checkpoint_selection_metric",
-        choices=["rmse"],
-        default=DEFAULT_MAIN_CHECKPOINT_SELECTION_METRIC,
-    )
-    parser.add_argument("--split_method", choices=["stratified_random", "chronological"], default=DEFAULT_SPLIT_METHOD)
-    parser.add_argument("--tabdiff_num_samples", type=int, default=None)
-    parser.add_argument("--tabdiff_gpu", type=int, default=None)
     parser.add_argument(
         "--skip_tabdiff_generation",
         action="store_true",
@@ -252,9 +218,7 @@ def validate_args(args: argparse.Namespace) -> None:
     bounded = {
         "dynamic_synthetic_top_ratio": args.dynamic_synthetic_top_ratio,
         "dynamic_synthetic_weight_min": args.dynamic_synthetic_weight_min,
-        "dynamic_synthetic_ema": args.dynamic_synthetic_ema,
-        "dynamic_synthetic_reliability_floor": args.dynamic_synthetic_reliability_floor,
-        "dynamic_synthetic_quota_strength": args.dynamic_synthetic_quota_strength,
+        "dynamic_synthetic_process_power": args.dynamic_synthetic_process_power,
     }
     for name, value in bounded.items():
         if value is None:
@@ -266,15 +230,7 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError(f"--dynamic_synthetic_top_ratio must be in (0, 1], got {args.dynamic_synthetic_top_ratio}.")
     nonnegative_dynamic = {
         "dynamic_synthetic_weight_max": args.dynamic_synthetic_weight_max,
-        "dynamic_synthetic_error_weight": args.dynamic_synthetic_error_weight,
-        "dynamic_synthetic_train_region_weight": args.dynamic_synthetic_train_region_weight,
-        "dynamic_synthetic_scarcity_weight": args.dynamic_synthetic_scarcity_weight,
-        "dynamic_synthetic_real_feedback_weight": args.dynamic_synthetic_real_feedback_weight,
-        "dynamic_synthetic_quota_min": args.dynamic_synthetic_quota_min,
-        "dynamic_synthetic_quota_max": args.dynamic_synthetic_quota_max,
-        "dynamic_synthetic_process_power": args.dynamic_synthetic_process_power,
         "dynamic_synthetic_mechanism_power": args.dynamic_synthetic_mechanism_power,
-        "cluster_balance_lambda": args.cluster_balance_lambda,
         "reward_alpha_cluster": args.reward_alpha_cluster,
     }
     for name, value in nonnegative_dynamic.items():
@@ -285,13 +241,6 @@ def validate_args(args: argparse.Namespace) -> None:
             "--dynamic_synthetic_weight_max must be >= --dynamic_synthetic_weight_min, "
             f"got {args.dynamic_synthetic_weight_max} < {args.dynamic_synthetic_weight_min}."
         )
-    if float(args.dynamic_synthetic_quota_max) < float(args.dynamic_synthetic_quota_min):
-        raise ValueError(
-            "--dynamic_synthetic_quota_max must be >= --dynamic_synthetic_quota_min, "
-            f"got {args.dynamic_synthetic_quota_max} < {args.dynamic_synthetic_quota_min}."
-        )
-
-
 def append_optional_cli_args(
     cmd: list[str],
     args: argparse.Namespace,
@@ -360,6 +309,10 @@ def build_main_train_command(
     ]
     cmd.extend(["--synthetic_pretrain_epochs", str(args.synthetic_pretrain_epochs)])
     cmd = append_optional_cli_args(cmd, args, MAIN_TRAIN_ARG_SPECS)
+    if not args.use_dynamic_synthetic_agent:
+        cmd.append("--no_dynamic_synthetic_agent")
+    if not args.use_cluster_balance_reward:
+        cmd.append("--no_cluster_balance_reward")
     if not args.use_layerwise_finetune_lr:
         cmd.append("--no_layerwise_finetune_lr")
     if not args.freeze_finetune_backbone:
@@ -374,6 +327,10 @@ def build_main_train_command(
         cmd = append_optional_cli_args(cmd, args, mr_lora_value_specs)
         if args.mr_lora_train_output_head:
             cmd.append("--mr_lora_train_output_head")
+        else:
+            cmd.append("--no_mr_lora_train_output_head")
+    else:
+        cmd.append("--no_mr_lora")
     if (scientific_code_hash is None) != (generation_protocol_hash is None):
         raise ValueError("Scientific code and generation protocol hashes must be provided together.")
     if scientific_code_hash is not None and generation_protocol_hash is not None:
@@ -425,6 +382,8 @@ def run_experiments(args: argparse.Namespace) -> None:
     root = (PROJECT_ROOT / args.output_root).resolve()
     root = root / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     count = int(args.tabdiff_num_samples or DEFAULT_TABDIFF_NUM_SAMPLES)
+    commands: list[list[str]] = []
+    results: list[dict[str, object]] = []
     for seed in args.seeds:
         run_dir = root / f"seed_{seed}"
         synthetic = str((PROJECT_ROOT / seed_template_path(args.synthetic_data_path, seed)).resolve())

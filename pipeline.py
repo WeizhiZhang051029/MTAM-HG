@@ -53,7 +53,7 @@ def append_run_timestamp_to_output_dir() -> None:
 _YAML_CONFIG_MAPPING = {key: key.upper() for key in """
     rgcn_vectorized rgcn_basis_factorized use_sdpa compile_pretrain
     feedback_eval_batch_size fused_pretrain_optimizer cache_positional_encoding
-    skip_redundant_real_forward skip_refresh_diagnostics data_path batch_size
+    skip_redundant_real_forward data_path batch_size
     epochs lr weight_decay dropout seed split_seed split_method generation_seed
     graph_backbone_layers top_k moe_aux_lambda moe_gate_temperature
     moe_balance_prob_lambda moe_balance_usage_lambda moe_entropy_reg_lambda
@@ -70,7 +70,7 @@ _YAML_CONFIG_MAPPING = {key: key.upper() for key in """
     tabdiff_mechanism_temperature_hold_tolerance tabdiff_mechanism_yield_tolerance
     tabdiff_trainable_scope tabdiff_min_save_epoch tabdiff_finetune_lr
     tabdiff_finetune_steps tabdiff_num_timesteps_override tabdiff_stochastic_sampler
-    early_stopping_patience min_delta use_synthetic_pretrain synthetic_data_path
+    early_stopping_patience min_delta synthetic_data_path
     synthetic_label_col synthetic_pretrain_epochs synthetic_batch_size
     synthetic_use_agent_weight synthetic_use_reward_loss synthetic_agent_hidden_dim
     synthetic_agent_attention_dim synthetic_agent_attention_heads synthetic_agent_dropout
@@ -83,17 +83,14 @@ _YAML_CONFIG_MAPPING = {key: key.upper() for key in """
     use_dynamic_synthetic_agent dynamic_synthetic_refresh_epochs
     dynamic_synthetic_warmup_epochs dynamic_synthetic_use_sampler
     dynamic_synthetic_use_loss_weight dynamic_synthetic_top_ratio
-    dynamic_synthetic_weight_min dynamic_synthetic_weight_max dynamic_synthetic_ema
-    dynamic_synthetic_error_weight dynamic_synthetic_train_region_weight
-    dynamic_synthetic_scarcity_weight dynamic_synthetic_real_feedback_weight
-    dynamic_synthetic_quota_strength dynamic_synthetic_quota_min dynamic_synthetic_quota_max
-    dynamic_synthetic_reliability_floor dynamic_synthetic_scarcity_bins
+    dynamic_synthetic_weight_min dynamic_synthetic_weight_max
+    dynamic_synthetic_scarcity_bins
     dynamic_synthetic_process_power dynamic_synthetic_mechanism_power
     use_layerwise_finetune_lr finetune_backbone_lr finetune_head_lr finetune_agent_lr
     finetune_quality_agent_lr freeze_finetune_backbone finetune_trainable_keywords
     use_mr_lora mr_lora_scope mr_lora_rank_graph mr_lora_rank_routing mr_lora_alpha_graph
     mr_lora_alpha_routing mr_lora_dropout mr_lora_train_output_head
-    use_cluster_balance_reward num_working_condition_clusters cluster_balance_lambda
+    use_cluster_balance_reward num_working_condition_clusters
     reward_alpha_cluster checkpoint_selection_metric
 """.split()}
 _YAML_CONFIG_MAPPING.update({
@@ -134,29 +131,25 @@ def load_config_overrides(path: str | None) -> None:
                 config.D_MODEL = int(value)
                 config.GRAPH_EMBED_DIM = int(value)
             elif key == "expert_dim":
-                config.EXPERT_DIM = int(value)
+                if "hidden_dim" not in loaded.get("cli", {}):
+                    config.D_MODEL = int(value)
+                    config.GRAPH_EMBED_DIM = int(value)
             elif key == "use_laplace" and value:
                 config.USE_LAPLACE = True
             elif key == "no_laplace" and value:
                 config.USE_LAPLACE = False
             elif key == "agent_use_expert_preds":
                 config.AGENT_USE_EXPERT_PREDS = bool(value)
-                config.agent_use_expert_preds = config.AGENT_USE_EXPERT_PREDS
             elif key == "agent_use_process_features":
                 config.AGENT_USE_PROCESS_FEATURES = bool(value)
-                config.agent_use_process_features = config.AGENT_USE_PROCESS_FEATURES
             elif key == "agent_use_uncertainty":
                 config.AGENT_USE_UNCERTAINTY = bool(value)
-                config.agent_use_uncertainty = config.AGENT_USE_UNCERTAINTY
             elif key == "agent_output_sample_confidence":
                 config.AGENT_OUTPUT_SAMPLE_CONFIDENCE = bool(value)
-                config.agent_output_sample_confidence = config.AGENT_OUTPUT_SAMPLE_CONFIDENCE
             elif key == "agent_use_sample_weight_for_supervised_loss":
                 config.AGENT_USE_SAMPLE_WEIGHT_FOR_SUPERVISED_LOSS = bool(value)
-                config.agent_use_sample_weight_for_supervised_loss = config.AGENT_USE_SAMPLE_WEIGHT_FOR_SUPERVISED_LOSS
             elif key == "use_confidence_weighted_supervised_loss":
                 config.USE_CONFIDENCE_WEIGHTED_SUPERVISED_LOSS = bool(value)
-                config.use_confidence_weighted_supervised_loss = config.USE_CONFIDENCE_WEIGHTED_SUPERVISED_LOSS
             elif key == "use_virtual_quality_node":
                 config.USE_VIRTUAL_QUALITY_NODE = bool(value)
             elif key == "no_virtual_quality_node" and value:
@@ -230,15 +223,6 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
         "dynamic_synthetic_top_ratio": "DYNAMIC_SYNTHETIC_TOP_RATIO",
         "dynamic_synthetic_weight_min": "DYNAMIC_SYNTHETIC_WEIGHT_MIN",
         "dynamic_synthetic_weight_max": "DYNAMIC_SYNTHETIC_WEIGHT_MAX",
-        "dynamic_synthetic_ema": "DYNAMIC_SYNTHETIC_EMA",
-        "dynamic_synthetic_error_weight": "DYNAMIC_SYNTHETIC_ERROR_WEIGHT",
-        "dynamic_synthetic_train_region_weight": "DYNAMIC_SYNTHETIC_TRAIN_REGION_WEIGHT",
-        "dynamic_synthetic_scarcity_weight": "DYNAMIC_SYNTHETIC_SCARCITY_WEIGHT",
-        "dynamic_synthetic_real_feedback_weight": "DYNAMIC_SYNTHETIC_REAL_FEEDBACK_WEIGHT",
-        "dynamic_synthetic_quota_strength": "DYNAMIC_SYNTHETIC_QUOTA_STRENGTH",
-        "dynamic_synthetic_quota_min": "DYNAMIC_SYNTHETIC_QUOTA_MIN",
-        "dynamic_synthetic_quota_max": "DYNAMIC_SYNTHETIC_QUOTA_MAX",
-        "dynamic_synthetic_reliability_floor": "DYNAMIC_SYNTHETIC_RELIABILITY_FLOOR",
         "dynamic_synthetic_scarcity_bins": "DYNAMIC_SYNTHETIC_SCARCITY_BINS",
         "dynamic_synthetic_process_power": "DYNAMIC_SYNTHETIC_PROCESS_POWER",
         "dynamic_synthetic_mechanism_power": "DYNAMIC_SYNTHETIC_MECHANISM_POWER",
@@ -270,7 +254,6 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
         "mr_lora_alpha_routing": "MR_LORA_ALPHA_ROUTING",
         "mr_lora_dropout": "MR_LORA_DROPOUT",
         "num_working_condition_clusters": "NUM_WORKING_CONDITION_CLUSTERS",
-        "cluster_balance_lambda": "CLUSTER_BALANCE_LAMBDA",
         "reward_alpha_cluster": "REWARD_ALPHA_CLUSTER",
         "checkpoint_selection_metric": "CHECKPOINT_SELECTION_METRIC",
     }
@@ -283,9 +266,9 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
         config.D_MODEL = args.hidden_dim
         config.GRAPH_EMBED_DIM = args.hidden_dim
     if args.expert_dim is not None:
-        config.EXPERT_DIM = args.expert_dim
         if args.hidden_dim is None:
             config.D_MODEL = args.expert_dim
+            config.GRAPH_EMBED_DIM = args.expert_dim
     if args.lambda_moe is not None or args.moe_aux_lambda is not None:
         value = args.moe_aux_lambda if args.moe_aux_lambda is not None else args.lambda_moe
         _set_mapped_config("MOE_AUX_LAMBDA", value)
@@ -304,13 +287,13 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
 
     if args.no_agent_reward:
         _set_mapped_config("USE_AGENT_REWARD", False)
-    if args.no_layerwise_finetune_lr:
+    if getattr(args, "use_layerwise_finetune_lr", None) is False:
         _set_mapped_config("USE_LAYERWISE_FINETUNE_LR", False)
-    if args.no_mr_lora:
+    if getattr(args, "use_mr_lora", None) is False:
         _set_mapped_config("USE_MR_LORA", False)
-    if args.no_mr_lora_train_output_head:
+    if getattr(args, "mr_lora_train_output_head", None) is False:
         _set_mapped_config("MR_LORA_TRAIN_OUTPUT_HEAD", False)
-    if args.no_cluster_balance_reward:
+    if getattr(args, "use_cluster_balance_reward", None) is False:
         _set_mapped_config("USE_CLUSTER_BALANCE_REWARD", False)
     if args.freeze_finetune_backbone is not None:
         _set_mapped_config("FREEZE_FINETUNE_BACKBONE", bool(args.freeze_finetune_backbone))
@@ -393,22 +376,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dynamic_synthetic_top_ratio", type=float, default=None)
     parser.add_argument("--dynamic_synthetic_weight_min", type=float, default=None)
     parser.add_argument("--dynamic_synthetic_weight_max", type=float, default=None)
-    parser.add_argument("--dynamic_synthetic_ema", type=float, default=None)
-    parser.add_argument("--dynamic_synthetic_error_weight", type=float, default=None)
-    parser.add_argument("--dynamic_synthetic_train_region_weight", type=float, default=None)
-    parser.add_argument("--dynamic_synthetic_scarcity_weight", type=float, default=None)
-    parser.add_argument("--dynamic_synthetic_real_feedback_weight", type=float, default=None)
-    parser.add_argument("--dynamic_synthetic_quota_strength", type=float, default=None)
-    parser.add_argument("--dynamic_synthetic_quota_min", type=float, default=None)
-    parser.add_argument("--dynamic_synthetic_quota_max", type=float, default=None)
-    parser.add_argument("--dynamic_synthetic_reliability_floor", type=float, default=None)
     parser.add_argument("--dynamic_synthetic_scarcity_bins", type=int, default=None)
     parser.add_argument("--dynamic_synthetic_process_power", type=float, default=None)
     parser.add_argument("--dynamic_synthetic_mechanism_power", type=float, default=None)
-    parser.add_argument("--use_cluster_balance_reward", action="store_true")
-    parser.add_argument("--no_cluster_balance_reward", action="store_true")
+    parser.add_argument(
+        "--use_cluster_balance_reward",
+        dest="use_cluster_balance_reward",
+        action="store_true",
+        default=None,
+    )
+    parser.add_argument(
+        "--no_cluster_balance_reward",
+        dest="use_cluster_balance_reward",
+        action="store_false",
+    )
     parser.add_argument("--num_working_condition_clusters", type=int, default=None)
-    parser.add_argument("--cluster_balance_lambda", type=float, default=None)
     parser.add_argument("--reward_alpha_cluster", type=float, default=None)
     parser.add_argument("--finetune_backbone_lr", type=float, default=None)
     parser.add_argument("--finetune_head_lr", type=float, default=None)
@@ -416,8 +398,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--finetune_quality_agent_lr", type=float, default=None)
     parser.add_argument("--freeze_finetune_backbone", dest="freeze_finetune_backbone", action="store_true", default=None)
     parser.add_argument("--no_freeze_finetune_backbone", dest="freeze_finetune_backbone", action="store_false")
-    parser.add_argument("--use_mr_lora", action="store_true", help="Enable MR-LoRA adapters only for real-domain fine-tuning.")
-    parser.add_argument("--no_mr_lora", action="store_true", help="Force-disable MR-LoRA adapters.")
+    parser.add_argument(
+        "--use_mr_lora",
+        dest="use_mr_lora",
+        action="store_true",
+        default=None,
+        help="Enable MR-LoRA adapters only for real-domain fine-tuning.",
+    )
+    parser.add_argument(
+        "--no_mr_lora",
+        dest="use_mr_lora",
+        action="store_false",
+        help="Force-disable MR-LoRA adapters.",
+    )
     parser.add_argument(
         "--mr_lora_scope",
         choices=list(MR_LORA_SCOPE_FAMILIES),
@@ -429,11 +422,29 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mr_lora_alpha_graph", type=float, default=None)
     parser.add_argument("--mr_lora_alpha_routing", type=float, default=None)
     parser.add_argument("--mr_lora_dropout", type=float, default=None)
-    parser.add_argument("--mr_lora_train_output_head", action="store_true")
-    parser.add_argument("--no_mr_lora_train_output_head", action="store_true")
+    parser.add_argument(
+        "--mr_lora_train_output_head",
+        dest="mr_lora_train_output_head",
+        action="store_true",
+        default=None,
+    )
+    parser.add_argument(
+        "--no_mr_lora_train_output_head",
+        dest="mr_lora_train_output_head",
+        action="store_false",
+    )
     parser.add_argument("--checkpoint_selection_metric", choices=["rmse"], default=None)
-    parser.add_argument("--use_layerwise_finetune_lr", action="store_true")
-    parser.add_argument("--no_layerwise_finetune_lr", action="store_true")
+    parser.add_argument(
+        "--use_layerwise_finetune_lr",
+        dest="use_layerwise_finetune_lr",
+        action="store_true",
+        default=None,
+    )
+    parser.add_argument(
+        "--no_layerwise_finetune_lr",
+        dest="use_layerwise_finetune_lr",
+        action="store_false",
+    )
     parser.add_argument("--tabdiff_num_samples", type=int, default=None)
     parser.add_argument("--tabdiff_gpu", type=int, default=None)
     parser.add_argument("--use_confidence_weighted_supervised_loss", action="store_true")
@@ -468,7 +479,6 @@ def run_generate_synthetic_tabdiff(args: argparse.Namespace) -> dict[str, object
         checkpoint_path=train_result.get("checkpoint_path"),
         expected_checkpoint_sha256=train_result.get("checkpoint_sha256"),
     )
-    postprocess_result: dict[str, object] | None = None
     postprocess_result = postprocess_tabdiff_samples(
         checkpoint_path=train_result.get("checkpoint_path"),
         expected_checkpoint_sha256=train_result.get("checkpoint_sha256"),

@@ -379,7 +379,6 @@ class IPOHGNExpert(nn.Module):
             "mu": self.mu_head(pooled),
             "A_kg": A_kg,
             "A_het": A_het,
-            "A_hat": A_kg,
             "A0": A0,
             "hidden": pooled,
             "node_hidden": node_h,

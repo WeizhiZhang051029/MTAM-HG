@@ -324,14 +324,6 @@ def _load_real_arrays_with_snapshot(
     )
 
 
-def _load_real_arrays(
-    data_path: str | Path,
-    node_names: list[str],
-    label_column: str | None,
-) -> tuple[np.ndarray, np.ndarray, list[str], str, dict[str, str], str]:
-    return _load_real_arrays_with_snapshot(data_path, node_names, label_column)[:-1]
-
-
 def _print_data_summary(bundle: DataBundle) -> None:
     print(f"[Data] Source: {bundle.data_path}")
     print(f"[Data] Label column: {bundle.label_column}")

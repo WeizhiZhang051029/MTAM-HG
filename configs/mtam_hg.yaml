@@ -23,7 +23,6 @@ tabdiff_finetune_steps: 500
 tabdiff_num_timesteps_override: 50
 tabdiff_stochastic_sampler: true
 
-use_synthetic_pretrain: true
 synthetic_data_path: data/synthetic_CAPL_ma_tabdiff.xlsx
 synthetic_label_col: 屈服强度
 synthetic_pretrain_epochs: 100
@@ -46,7 +45,6 @@ dynamic_synthetic_process_power: 1.0
 dynamic_synthetic_mechanism_power: 1.0
 use_cluster_balance_reward: true
 num_working_condition_clusters: 5
-cluster_balance_lambda: 0.3
 reward_alpha_cluster: 0.3
 
 num_experts: 4
@@ -95,7 +93,6 @@ cli:
 
 rgcn_vectorized: true
 skip_redundant_real_forward: true
-skip_refresh_diagnostics: true
 
 rgcn_basis_factorized: true
 

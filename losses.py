@@ -32,10 +32,24 @@ def laplace_nll_loss(
     return loss.mean()
 
 
-def moe_load_balance_loss(gate_weights_list: Iterable[torch.Tensor]) -> torch.Tensor:
+def moe_load_balance_loss(
+    gate_weights_list: Iterable[torch.Tensor],
+    gate_probs: torch.Tensor | None = None,
+    balance_coefficients: tuple[float, float, float] | None = None,
+) -> torch.Tensor:
 
     weights_list = list(gate_weights_list)
     device = weights_list[0].device if weights_list else None
+    if balance_coefficients is None:
+        if gate_probs is None:
+            balance_coefficients = (1.0, 0.0, 0.0)
+        else:
+            balance_coefficients = (
+                float(getattr(config, "MOE_BALANCE_USAGE_LAMBDA", 1.0)),
+                float(getattr(config, "MOE_BALANCE_PROB_LAMBDA", 0.5)),
+                float(getattr(config, "MOE_ENTROPY_REG_LAMBDA", 0.01)),
+            )
+    usage_weight, probability_weight, entropy_weight = balance_coefficients
     losses = []
     for weights in weights_list:
         num_experts = weights.shape[-1]
@@ -45,7 +59,20 @@ def moe_load_balance_loss(gate_weights_list: Iterable[torch.Tensor]) -> torch.Te
         importance_loss = ((importance - uniform) ** 2).mean()
         load = weights.mean(dim=0)
         load_loss = ((load - uniform) ** 2).mean()
-        losses.append(importance_loss + load_loss)
+        sparse_balance = importance_loss + load_loss
+        probability_balance = weights.new_tensor(0.0)
+        entropy_regularization = weights.new_tensor(0.0)
+        if gate_probs is not None:
+            probability_importance = gate_probs.mean(dim=0)
+            probability_balance = ((probability_importance - uniform) ** 2).mean()
+            entropy = -(gate_probs * torch.log(gate_probs + 1.0e-8)).sum(dim=-1).mean()
+            max_entropy = torch.log(gate_probs.new_tensor(float(num_experts)))
+            entropy_regularization = (max_entropy - entropy) / (max_entropy + 1.0e-8)
+        losses.append(
+            usage_weight * sparse_balance
+            + probability_weight * probability_balance
+            + entropy_weight * entropy_regularization
+        )
     if not losses:
         return torch.tensor(0.0, device=device)
     return torch.stack(losses).sum()

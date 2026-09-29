@@ -11,7 +11,6 @@ from training.batch_metadata import transfer_float_metadata
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
@@ -20,7 +19,7 @@ import config
 from dataset import CAPLDataset, DataBundle
 from evaluate import _inverse_y, evaluate_model, save_evaluation_outputs
 from generation.tabdiff import project_path
-from losses import total_loss as paper_total_loss
+from losses import _as_output_dict, total_loss as paper_total_loss
 from metrics import compute_metrics
 from models.mtam_hg import MECHANISM_EXPERT_NODE_GROUPS
 from train import (
@@ -141,19 +140,6 @@ def _unit_interval(values: np.ndarray, neutral: float = 1.0) -> np.ndarray:
     return np.clip(out, 0.0, 1.0)
 
 
-def _normalize_positive(values: np.ndarray, neutral: float = 0.5) -> np.ndarray:
-    arr = np.asarray(values, dtype=np.float64).reshape(-1)
-    finite = arr[np.isfinite(arr) & (arr >= 0.0)]
-    if len(finite) == 0:
-        return np.full(arr.shape, float(neutral), dtype=np.float64)
-    low = float(np.nanquantile(finite, 0.05))
-    high = float(np.nanquantile(finite, 0.95))
-    if not np.isfinite(low) or not np.isfinite(high) or high <= low + 1.0e-12:
-        return np.full(arr.shape, float(neutral), dtype=np.float64)
-    clipped = np.clip(np.where(np.isfinite(arr) & (arr >= 0.0), arr, low), low, high)
-    return np.clip((clipped - low) / (high - low), 0.0, 1.0)
-
-
 def _inverse_x(data_bundle: DataBundle, x: np.ndarray) -> np.ndarray:
     return data_bundle.x_scaler.inverse_transform(x) if config.STANDARDIZE_X else x
 
@@ -165,6 +151,28 @@ def _train_arrays(data_bundle: DataBundle) -> tuple[np.ndarray, np.ndarray, np.n
     x_raw = _inverse_x(data_bundle, x_scaled).astype(np.float32)
     y_raw = _inverse_y(y_scaled, data_bundle).astype(np.float32)
     return x_scaled, y_scaled, x_raw, y_raw
+
+
+def range_consistency_score(
+    reference: np.ndarray,
+    query: np.ndarray,
+    *,
+    low_quantile: float,
+    high_quantile: float,
+    margin: float,
+) -> np.ndarray:
+    """根据训练数据范围计算查询样本的一致性分数。"""
+    reference = np.asarray(reference, dtype=np.float32)
+    query = np.asarray(query, dtype=np.float32)
+    lower = np.nanquantile(reference, low_quantile, axis=0)
+    upper = np.nanquantile(reference, high_quantile, axis=0)
+    spread = np.maximum(upper - lower, 1.0e-6)
+    lower = lower - margin * spread
+    upper = upper + margin * spread
+    below = np.maximum(lower.reshape(1, -1) - query, 0.0)
+    above = np.maximum(query - upper.reshape(1, -1), 0.0)
+    excess = (below + above) / spread.reshape(1, -1)
+    return np.exp(-excess).mean(axis=1).astype(np.float32)
 
 
 def _train_tensor_bundle(data_bundle: DataBundle, device: torch.device) -> TrainTensorBundle:
@@ -255,23 +263,22 @@ def compute_process_consistency_scores(
     y_scaled: np.ndarray,
     x_raw: np.ndarray,
     y_raw: np.ndarray,
+    train_arrays: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None,
 ) -> dict[str, np.ndarray]:
 
-    train_x_scaled, train_y_scaled, train_x_raw, train_y_raw = _train_arrays(data_bundle)
+    train_x_scaled, train_y_scaled, train_x_raw, train_y_raw = train_arrays or _train_arrays(data_bundle)
     low_q = float(getattr(config, "SYNTHETIC_PROCESS_RANGE_QUANTILE_LOW", 0.01))
     high_q = float(getattr(config, "SYNTHETIC_PROCESS_RANGE_QUANTILE_HIGH", 0.99))
     margin = float(getattr(config, "SYNTHETIC_PROCESS_RANGE_MARGIN", 0.10))
     train_raw = np.concatenate([train_x_raw, train_y_raw], axis=1)
     syn_raw = np.concatenate([x_raw, y_raw], axis=1)
-    lower = np.nanquantile(train_raw, low_q, axis=0)
-    upper = np.nanquantile(train_raw, high_q, axis=0)
-    spread = np.maximum(upper - lower, 1.0e-6)
-    lower = lower - margin * spread
-    upper = upper + margin * spread
-    below = np.maximum(lower.reshape(1, -1) - syn_raw, 0.0)
-    above = np.maximum(syn_raw - upper.reshape(1, -1), 0.0)
-    excess = (below + above) / spread.reshape(1, -1)
-    range_score = np.exp(-excess).mean(axis=1)
+    range_score = range_consistency_score(
+        train_raw,
+        syn_raw,
+        low_quantile=low_q,
+        high_quantile=high_q,
+        margin=margin,
+    )
 
     k = int(getattr(config, "SYNTHETIC_PROCESS_KNN_K", 5))
     nearest_distance, nearest_index, knn_y_scaled = _neighbor_statistics(
@@ -319,9 +326,10 @@ def compute_process_consistency_scores(
 def compute_mechanism_consistency_scores(
     data_bundle: DataBundle,
     x_raw: np.ndarray,
+    train_arrays: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None,
 ) -> np.ndarray:
 
-    _, _, train_x_raw, _ = _train_arrays(data_bundle)
+    _, _, train_x_raw, _ = train_arrays or _train_arrays(data_bundle)
     feature_to_idx = {name: idx for idx, name in enumerate(data_bundle.standard_node_names)}
     group_scores: list[np.ndarray] = []
     low_q = float(getattr(config, "SYNTHETIC_PROCESS_RANGE_QUANTILE_LOW", 0.01))
@@ -333,15 +341,15 @@ def compute_mechanism_consistency_scores(
             continue
         train_group = train_x_raw[:, indices]
         syn_group = x_raw[:, indices]
-        lower = np.nanquantile(train_group, low_q, axis=0)
-        upper = np.nanquantile(train_group, high_q, axis=0)
-        spread = np.maximum(upper - lower, 1.0e-6)
-        lower = lower - margin * spread
-        upper = upper + margin * spread
-        below = np.maximum(lower.reshape(1, -1) - syn_group, 0.0)
-        above = np.maximum(syn_group - upper.reshape(1, -1), 0.0)
-        excess = (below + above) / spread.reshape(1, -1)
-        group_scores.append(np.exp(-excess).mean(axis=1))
+        group_scores.append(
+            range_consistency_score(
+                train_group,
+                syn_group,
+                low_quantile=low_q,
+                high_quantile=high_q,
+                margin=margin,
+            )
+        )
     if not group_scores:
         return np.ones(x_raw.shape[0], dtype=np.float32)
     return np.clip(np.stack(group_scores, axis=1).mean(axis=1), 0.0, 1.0).astype(np.float32)
@@ -418,8 +426,20 @@ def _load_synthetic_bundle(data_bundle: DataBundle, synthetic_path: str | Path |
         if "generation_condition" in df.columns
         else np.array(["unconditional"] * len(df))
     )
-    scores = compute_process_consistency_scores(data_bundle, x, y, x_raw, y_raw)
-    mechanism_consistency = compute_mechanism_consistency_scores(data_bundle, x_raw)
+    train_arrays = _train_arrays(data_bundle)
+    scores = compute_process_consistency_scores(
+        data_bundle,
+        x,
+        y,
+        x_raw,
+        y_raw,
+        train_arrays=train_arrays,
+    )
+    mechanism_consistency = compute_mechanism_consistency_scores(
+        data_bundle,
+        x_raw,
+        train_arrays=train_arrays,
+    )
     bundle = SyntheticBundle(
         loader=loader,
         frame=df,
@@ -677,7 +697,7 @@ def build_dynamic_synthetic_state(
         float(getattr(config, "DYNAMIC_SYNTHETIC_WEIGHT_MIN", 0.05)),
         float(getattr(config, "DYNAMIC_SYNTHETIC_WEIGHT_MAX", 3.0)),
     )
-    scarcity, bin_ids, bin_edges, train_bin_counts = synthetic_scarcity_bonus(
+    scarcity, bin_ids, _, _ = synthetic_scarcity_bonus(
         synthetic_bundle.y_raw,
         data_bundle.y_train_raw,
         int(getattr(config, "DYNAMIC_SYNTHETIC_SCARCITY_BINS", 10)),
@@ -692,11 +712,8 @@ def build_dynamic_synthetic_state(
         weights=initial.astype(np.float64),
         selected_indices=selected_indices,
         selected_mask=selected_mask,
-        previous_raw_weights=initial.astype(np.float64),
         scarcity_bonus=scarcity.astype(np.float64),
         bin_ids=bin_ids.astype(np.int64),
-        bin_edges=bin_edges.astype(np.float64),
-        train_bin_counts=train_bin_counts.astype(np.int64),
         feedback_features=zero_agent_feedback_features(n),
         feedback_target=np.zeros(n, dtype=np.float64),
         cluster_ids=cluster_ids,
@@ -704,104 +721,41 @@ def build_dynamic_synthetic_state(
 
 
 def compute_dynamic_synthetic_weights(
-    current_weights: np.ndarray,
     agent_policy_score: np.ndarray,
-    synthetic_mse: np.ndarray,
-    train_region_mse: np.ndarray,
     process_consistency: np.ndarray,
     mechanism_consistency: np.ndarray,
     scarcity_bonus: np.ndarray,
-    real_feedback: np.ndarray | None = None,
 ) -> dict[str, np.ndarray]:
-    """Combine CBTG quality signals into retention scores and sample weights."""
-    previous = np.asarray(current_weights, dtype=np.float64).reshape(-1)
+    """Compute CBTG retention scores and sample weights."""
+    process = _unit_interval(process_consistency, neutral=1.0)
+    mechanism = _unit_interval(mechanism_consistency, neutral=1.0)
     agent_policy = np.clip(
-        np.nan_to_num(np.asarray(agent_policy_score, dtype=np.float64).reshape(-1), nan=0.5),
+        np.nan_to_num(np.asarray(agent_policy_score, dtype=np.float64), nan=0.5),
         0.0,
         1.0,
     )
-    if len(previous) != len(agent_policy):
-        raise ValueError("Dynamic synthetic weight inputs must have the same length.")
-
-    process = np.power(
-        _unit_interval(process_consistency, neutral=1.0),
-        max(float(config.DYNAMIC_SYNTHETIC_PROCESS_POWER), 0.0),
+    reliability = (
+        agent_policy
+        * np.power(process, float(config.DYNAMIC_SYNTHETIC_PROCESS_POWER))
+        * np.power(mechanism, float(config.DYNAMIC_SYNTHETIC_MECHANISM_POWER))
     )
-    mechanism = np.power(
-        _unit_interval(mechanism_consistency, neutral=1.0),
-        max(float(config.DYNAMIC_SYNTHETIC_MECHANISM_POWER), 0.0),
-    )
-    synthetic_error_score = 1.0 - _normalize_positive(synthetic_mse, neutral=0.5)
-    train_region_score = 1.0 - _normalize_positive(train_region_mse, neutral=0.5)
     scarcity = _unit_interval(scarcity_bonus, neutral=0.0)
-    if real_feedback is None:
-        real_feedback_score = np.full(agent_policy.shape, 0.5, dtype=np.float64)
-    else:
-        feedback = np.asarray(real_feedback, dtype=np.float64).reshape(-1)
-        if len(feedback) != len(agent_policy):
-            raise ValueError("real_feedback must have the same length as agent_policy_score.")
-        real_feedback_score = _unit_interval((feedback + 1.0) / 2.0, neutral=0.5)
-
-    error_weight = max(float(getattr(config, "DYNAMIC_SYNTHETIC_ERROR_WEIGHT", 0.0)), 0.0)
-    train_region_weight = max(
-        float(getattr(config, "DYNAMIC_SYNTHETIC_TRAIN_REGION_WEIGHT", 0.0)),
-        0.0,
-    )
-    scarcity_weight = max(float(getattr(config, "DYNAMIC_SYNTHETIC_SCARCITY_WEIGHT", 0.0)), 0.0)
-    real_feedback_weight = max(
-        float(getattr(config, "DYNAMIC_SYNTHETIC_REAL_FEEDBACK_WEIGHT", 0.0)),
-        0.0,
-    )
-
-    base_reliability = agent_policy * process * mechanism
-    normalizer = 1.0 + error_weight + train_region_weight + scarcity_weight + real_feedback_weight
-    quality_score = (
-        base_reliability
-        + error_weight * synthetic_error_score
-        + train_region_weight * train_region_score
-        + scarcity_weight * scarcity
-        + real_feedback_weight * real_feedback_score
-    ) / normalizer
-
-    quota_strength = max(float(getattr(config, "DYNAMIC_SYNTHETIC_QUOTA_STRENGTH", 0.0)), 0.0)
-    quota_min = max(float(getattr(config, "DYNAMIC_SYNTHETIC_QUOTA_MIN", 0.0)), 0.0)
-    quota_max = max(float(getattr(config, "DYNAMIC_SYNTHETIC_QUOTA_MAX", 1.0)), quota_min)
-    centered_policy = agent_policy - float(np.nanmean(agent_policy)) if len(agent_policy) else agent_policy
-    quota_multiplier = 1.0 + quota_strength * centered_policy
-    quota_multiplier *= _unit_interval(base_reliability, neutral=1.0)
-    finite_quota = quota_multiplier[np.isfinite(quota_multiplier)]
-    if len(finite_quota) and float(np.mean(finite_quota)) > 1.0e-12:
-        quota_multiplier = quota_multiplier / float(np.mean(finite_quota))
-    quota_multiplier = np.clip(quota_multiplier, quota_min, quota_max)
-
-    reliability_floor = float(getattr(config, "DYNAMIC_SYNTHETIC_RELIABILITY_FLOOR", 0.0))
-    reliable_mask = base_reliability >= np.clip(reliability_floor, 0.0, 1.0)
-    selection_score = np.where(reliable_mask, quality_score * quota_multiplier, 0.0)
-
+    rare_condition_bonus = 1.0 + scarcity
+    selection_score = reliability * rare_condition_bonus
+    value = agent_policy
     mean_score = float(np.mean(selection_score)) if len(selection_score) else 0.0
-    raw_weights = selection_score / max(mean_score, 1.0e-12)
-    previous = np.where(np.isfinite(previous) & (previous >= 0.0), previous, 1.0)
-    previous_mean = float(np.mean(previous)) if len(previous) else 1.0
-    previous = previous / max(previous_mean, 1.0e-12)
-    ema = np.clip(float(getattr(config, "DYNAMIC_SYNTHETIC_EMA", 0.0)), 0.0, 1.0)
-    min_weight = max(float(getattr(config, "DYNAMIC_SYNTHETIC_WEIGHT_MIN", 0.05)), 0.0)
-    max_weight = max(float(getattr(config, "DYNAMIC_SYNTHETIC_WEIGHT_MAX", 3.0)), min_weight)
-    new_weights = np.clip(ema * previous + (1.0 - ema) * raw_weights, min_weight, max_weight)
-
+    raw = selection_score / max(mean_score, 1.0e-12)
+    reliable_mask = selection_score > 0.0
     return {
-        "weights": new_weights.astype(np.float64),
-        "raw_weights": raw_weights.astype(np.float64),
-        "reliability": base_reliability.astype(np.float64),
-        "learning_value": quality_score.astype(np.float64),
+        "raw_weights": raw.astype(np.float64),
+        "reliability": reliability.astype(np.float64),
+        "learning_value": value.astype(np.float64),
         "agent_policy_score": agent_policy.astype(np.float64),
         "selection_score": selection_score.astype(np.float64),
-        "synthetic_error_score": synthetic_error_score.astype(np.float64),
-        "train_region_score": train_region_score.astype(np.float64),
-        "real_feedback_score": real_feedback_score.astype(np.float64),
-        "scarcity_bonus": scarcity.astype(np.float64),
-        "quota_multiplier": quota_multiplier.astype(np.float64),
+        "scarcity_bonus": rare_condition_bonus.astype(np.float64),
         "reliable_mask": reliable_mask,
     }
+
 
 def select_top_synthetic_indices(
     score: np.ndarray,
@@ -812,7 +766,7 @@ def select_top_synthetic_indices(
     n = len(scores)
     if n == 0:
         return np.array([], dtype=np.int64), np.array([], dtype=bool)
-    ratio = float(top_ratio if top_ratio is not None else config.DYNAMIC_SYNTHETIC_TOP_RATIO)
+    ratio = float(top_ratio if top_ratio is not None else getattr(config, "DYNAMIC_SYNTHETIC_TOP_RATIO", 0.60))
     if not 0.0 < ratio <= 1.0:
         raise ValueError(f"DYNAMIC_SYNTHETIC_TOP_RATIO must be in (0, 1], got {ratio}.")
     keep_n = max(1, int(np.ceil(n * ratio)))
@@ -837,7 +791,7 @@ def rebuild_synthetic_loader(
         if len(selected) < 1:
             selected, selected_mask = select_top_synthetic_indices(
                 dynamic_state.weights,
-                top_ratio=config.DYNAMIC_SYNTHETIC_TOP_RATIO,
+                top_ratio=0.60,
             )
             dynamic_state.selected_indices = selected
             dynamic_state.selected_mask = selected_mask
@@ -859,38 +813,6 @@ def _feedback_for_clusters(training_feedback, cluster_ids):
         np.asarray(training_feedback["per_cluster_metrics"], dtype=np.float64),
         cluster_ids,
     )
-
-
-def _refresh_diagnostic_errors(model, train_tensors, synthetic_bundle, eval_loader, device):
-
-    n = len(synthetic_bundle.frame)
-    synthetic_mse = np.zeros(n, dtype=np.float64)
-    train_region_mse = np.zeros(n, dtype=np.float64)
-
-    if not getattr(config, "SKIP_REFRESH_DIAGNOSTICS", False):
-        with torch.no_grad():
-            for x, y, sample_ids in eval_loader:
-                x = x.to(device)
-                y = y.to(device)
-                sample_ids_np = sample_ids.detach().cpu().numpy().reshape(-1)
-                outputs = model(x)
-                y_pred = _output_mu(outputs).reshape(y.shape[0], -1)
-                y_true = y.reshape(y.shape[0], -1)
-                synthetic_batch_mse = ((y_pred - y_true) ** 2).mean(dim=-1)
-                mse_real, _, _, _ = _real_mse_reward_for_indices(
-                    model,
-                    train_tensors,
-                    synthetic_bundle.nearest_train_index[sample_ids_np],
-                    device,
-                )
-                synthetic_mse[sample_ids_np] = synthetic_batch_mse.detach().cpu().numpy().reshape(-1)
-                train_region_mse[sample_ids_np] = mse_real.detach().cpu().numpy().reshape(-1)
-
-    else:
-        synthetic_mse.fill(np.nan)
-        train_region_mse.fill(np.nan)
-
-    return synthetic_mse, train_region_mse
 
 
 def _update_refresh_agent(quality_agent, eval_loader, dynamic_state, optimizer, device):
@@ -930,7 +852,6 @@ def refresh_dynamic_synthetic_weights(
     quality_agent: SyntheticQualityAgent,
     synthetic_bundle: SyntheticBundle,
     data_bundle: DataBundle,
-    train_tensors: TrainTensorBundle,
     dynamic_state: DynamicSyntheticState,
     device: torch.device,
     epoch: int,
@@ -952,10 +873,6 @@ def refresh_dynamic_synthetic_weights(
         shuffle=False,
         num_workers=config.NUM_WORKERS,
     )
-    synthetic_mse, train_region_mse = _refresh_diagnostic_errors(
-        model, train_tensors, synthetic_bundle, eval_loader, device,
-    )
-
     training_feedback = evaluate_training_feedback(
         model,
         data_bundle,
@@ -984,14 +901,10 @@ def refresh_dynamic_synthetic_weights(
     )
 
     weight_parts = compute_dynamic_synthetic_weights(
-        current_weights=dynamic_state.weights,
         agent_policy_score=agent_policy,
-        synthetic_mse=synthetic_mse,
-        train_region_mse=train_region_mse,
         process_consistency=synthetic_bundle.process_consistency,
         mechanism_consistency=synthetic_bundle.mechanism_consistency,
         scarcity_bonus=dynamic_state.scarcity_bonus,
-        real_feedback=dynamic_state.feedback_target,
     )
     process = _unit_interval(synthetic_bundle.process_consistency, neutral=1.0)
     mechanism = _unit_interval(synthetic_bundle.mechanism_consistency, neutral=1.0)
@@ -999,14 +912,10 @@ def refresh_dynamic_synthetic_weights(
     reliability = weight_parts["reliability"]
     value = weight_parts["learning_value"]
     raw = weight_parts["raw_weights"]
-    new_weights = weight_parts["weights"]
+    new_weights = weight_parts["selection_score"]
     reliable_mask = weight_parts["reliable_mask"].astype(bool)
     agent_policy_score = weight_parts["agent_policy_score"]
     selection_score = weight_parts["selection_score"]
-    synthetic_error_score = weight_parts["synthetic_error_score"]
-    train_region_score = weight_parts["train_region_score"]
-    real_feedback_score = weight_parts["real_feedback_score"]
-    quota_multiplier = weight_parts["quota_multiplier"]
 
     training_score = float(
         np.dot(
@@ -1019,7 +928,6 @@ def refresh_dynamic_synthetic_weights(
         0.0 if previous is None or not np.isfinite(previous) else previous - training_score
     )
     dynamic_state.previous_train_score = training_score
-    dynamic_state.previous_raw_weights = raw.astype(np.float64)
     top_ratio = float(config.DYNAMIC_SYNTHETIC_TOP_RATIO)
     selected_indices, selected_mask = select_top_synthetic_indices(selection_score, top_ratio=top_ratio)
     dynamic_state.selected_indices = selected_indices
@@ -1036,18 +944,12 @@ def refresh_dynamic_synthetic_weights(
         "agent_quality_score": agent_policy,
         "agent_policy_score": agent_policy_score,
         "retention_score": selection_score,
-        "synthetic_mse": synthetic_mse,
-        "synthetic_error_score": synthetic_error_score,
-        "train_region_mse": train_region_mse,
-        "train_region_score": train_region_score,
         "process_consistency": process,
         "mechanism_consistency": mechanism,
         "scarcity_bonus": scarcity,
         "reliability": reliability,
         "learning_value": value,
         "agent_feedback_target": dynamic_state.feedback_target,
-        "real_feedback_score": real_feedback_score,
-        "agent_quota_multiplier": quota_multiplier,
         "reliable_for_dynamic_weight": reliable_mask,
         "selected_for_pretrain": dynamic_state.selected_mask,
         "synthetic_label_bin": dynamic_state.bin_ids,
@@ -1064,7 +966,6 @@ def refresh_dynamic_synthetic_weights(
     if agent_was_training:
         quality_agent.train()
     return {
-        "dynamic_refresh_diagnostics_skipped": float(getattr(config, "SKIP_REFRESH_DIAGNOSTICS", False)),
         "dynamic_refresh_epoch": float(epoch),
         "dynamic_refresh_count": float(dynamic_state.refresh_count),
         "dynamic_weight_mean": float(np.mean(dynamic_state.weights)) if n else float("nan"),
@@ -1084,9 +985,6 @@ def refresh_dynamic_synthetic_weights(
         "dynamic_refresh_agent_loss": float(np.mean(refresh_agent_losses))
         if refresh_agent_losses
         else float("nan"),
-        "dynamic_agent_quota_multiplier_mean": float(np.mean(quota_multiplier)) if n else float("nan"),
-        "dynamic_agent_quota_multiplier_min": float(np.min(quota_multiplier)) if n else float("nan"),
-        "dynamic_agent_quota_multiplier_max": float(np.max(quota_multiplier)) if n else float("nan"),
         "dynamic_reliable_ratio": float(np.mean(reliable_mask)) if n else float("nan"),
         "dynamic_training_rmse": float(training_feedback["training_rmse"]),
         "dynamic_training_mae": float(training_feedback["training_mae"]),
@@ -1160,8 +1058,7 @@ def _synthetic_step(
             metadata_values["feedback"] = dynamic_state.feedback_features[sample_ids_np]
     metadata = transfer_float_metadata(metadata_values, dtype=y.dtype, device=device)
     outputs = model(x)
-    if torch.is_tensor(outputs):
-        outputs = {"mu": outputs}
+    outputs = _as_output_dict(outputs)
     feedback_batch = None
     feedback_reward = None
     if dynamic_state is not None:
@@ -1446,7 +1343,6 @@ def pretrain_with_cbtg(
                     quality_agent,
                     synthetic_bundle,
                     data_bundle,
-                    train_tensors,
                     dynamic_state,
                     device,
                     epoch,
@@ -1482,7 +1378,7 @@ def pretrain_with_cbtg(
             "dynamic_synthetic_warmup_epochs": warmup_epochs,
             "dynamic_synthetic_use_sampler": bool(getattr(config, "DYNAMIC_SYNTHETIC_USE_SAMPLER", True)),
             "dynamic_synthetic_use_loss_weight": bool(getattr(config, "DYNAMIC_SYNTHETIC_USE_LOSS_WEIGHT", True)),
-            "dynamic_synthetic_top_ratio": float(config.DYNAMIC_SYNTHETIC_TOP_RATIO),
+            "dynamic_synthetic_top_ratio": 0.60,
             "synthetic_pretrain_lr": pretrain_lr,
             "synthetic_agent_epochs": agent_epochs,
             "synthetic_agent_update_active": update_quality_agent,
@@ -1508,16 +1404,13 @@ def pretrain_with_cbtg(
             dynamic_synthetic_warmup_epochs=warmup_epochs,
             dynamic_synthetic_use_sampler=bool(getattr(config, "DYNAMIC_SYNTHETIC_USE_SAMPLER", True)),
             dynamic_synthetic_use_loss_weight=bool(getattr(config, "DYNAMIC_SYNTHETIC_USE_LOSS_WEIGHT", True)),
-            dynamic_synthetic_top_ratio=float(config.DYNAMIC_SYNTHETIC_TOP_RATIO),
+            dynamic_synthetic_top_ratio=0.60,
             synthetic_agent_feedback_features=list(AGENT_FEEDBACK_FEATURE_NAMES),
             synthetic_agent_reward_formula=(
                 "R_i = clip(-sum_l beta_l[z(vbar_l) + 0.1z(s_l) + "
                 "0.3z(v_l,g(i)) + 0.3z(var_l)], -1, 1) on real training predictions"
             ),
-            synthetic_pretrain_confidence_rule=(
-                f"Top-{float(config.DYNAMIC_SYNTHETIC_TOP_RATIO):.2f} by configured CBTG quality score "
-                "with error, region, process, mechanism, scarcity, feedback, EMA, and quota terms."
-            ),
+            synthetic_pretrain_confidence_rule="Top-60% by S=c*p*m*b every 5 epochs",
         ),
         ckpt_path,
     )

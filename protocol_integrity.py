@@ -387,16 +387,6 @@ def _capture_bound_dependency(
     return snapshot
 
 
-def _synthetic_layout(path: Path) -> tuple[int, list[str]]:
-    try:
-        frame = read_table_snapshot(path).frame
-    except SyntheticProvenanceError:
-        raise
-    except Exception as exc:
-        raise SyntheticProvenanceError(f"Could not inspect synthetic data: {path}") from exc
-    return len(frame), [str(column) for column in frame.columns]
-
-
 def _validate_common(
     synthetic_path: Path,
     *,

@@ -100,8 +100,3 @@ def build_relation_templates(node_names: list[str] | None = None) -> tuple[torch
             templates.append(template)
             relation_names.append((src_type, dst_type))
     return torch.stack(templates, dim=0), relation_names
-
-
-def row_normalize_adjacency(A: torch.Tensor, eps: float = 1.0e-8) -> torch.Tensor:
-
-    return A / (A.sum(dim=-1, keepdim=True) + eps)

@@ -33,10 +33,6 @@ def _default_output_path() -> Path:
     return project_path(getattr(config, "SYNTHETIC_DATA_PATH", "data/synthetic_CAPL_ma_tabdiff.xlsx"))
 
 
-def _read_samples(path: Path) -> pd.DataFrame:
-    return read_table_snapshot(path).frame
-
-
 def _save_samples(df: pd.DataFrame, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.suffix.lower() == ".csv":
