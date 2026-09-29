@@ -170,10 +170,6 @@ The pipeline sequentially:
 7. selects the model according to validation performance.
 8. evaluates the final model on the held-out test set.
 
-### Data Requirement
-
-Formal training requires an authorized CAPL dataset. This release does not include private data, synthetic smoke-test data, or a dry-run validation path.
-
 ---
 
 ## 📏 Evaluation Metrics
