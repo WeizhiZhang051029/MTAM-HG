@@ -108,36 +108,6 @@ Evaluation metrics and prediction results are saved separately for each run.
 
 ---
 
-## ⚙️ Configuration
-
-The manuscript configuration is provided in:
-
-```text
-configs/mtam_hg.yaml
-```
-
-Representative settings include:
-
-| Component                    | Setting         |
-| ---------------------------- | --------------- |
-| Real-data split              | 70% / 15% / 15% |
-| Independent runs             | 10              |
-| Operating-condition clusters | 5               |
-| Synthetic candidates         | 5,000           |
-| MP-TabDiff diffusion steps   | 50              |
-| MP-TabDiff fine-tuning steps | 500             |
-| CBTG-Agent refresh interval  | 5 epochs        |
-| Synthetic retention ratio    | 60%             |
-| Number of HG experts         | 4               |
-| Active experts               | Top-2           |
-| Synthetic pretraining        | 100 epochs      |
-| Real-domain calibration      | Up to 50 epochs; early-stopping patience: 5 |
-| Optimizer                    | AdamW           |
-
-Detailed architecture, optimization, routing, Agent, and LoRA parameters are specified in the configuration file.
-
----
-
 ## 🛠️ Installation
 
 Clone the repository:
@@ -206,130 +176,6 @@ Formal training requires an authorized CAPL dataset. This release does not inclu
 
 ---
 
-## 📁 Repository Structure
-
-```text
-MTAM-HG-A-Mixture-of-Experts-Heterogeneous-Graph-Network-with-Agent-Regulated-Diffusion-Augmentation/
-├── configs/
-│   └── mtam_hg.yaml
-├── generation/
-│   ├── __init__.py
-│   ├── prepare.py
-│   ├── train.py
-│   ├── sample.py
-│   ├── postprocess.py
-│   └── tabdiff.py
-├── images/
-│   ├── framework.jpg
-│   ├── mp-tabdiff.jpg
-│   ├── cbtg-agent.jpg
-│   └── moe-ipohgn.jpg
-├── models/
-│   ├── __init__.py
-│   ├── graph_structure.py
-│   ├── ipohgn.py
-│   ├── mr_lora.py
-│   └── mtam_hg.py
-├── third_party/
-│   └── TabDiff/
-│       ├── LICENSE
-│       ├── main.py
-│       ├── process_dataset.py
-│       ├── utils_train.py
-│       ├── tabdiff.yaml
-│       ├── src/
-│       └── tabdiff/
-├── training/
-│   ├── __init__.py
-│   ├── batch_metadata.py
-│   ├── cbtg.py
-│   ├── clusters.py
-│   ├── compilation.py
-│   ├── evaluation.py
-│   ├── quality_agent.py
-│   ├── step_logging.py
-│   └── synthetic_types.py
-├── utils/
-│   ├── __init__.py
-│   ├── graph.py
-│   ├── logger.py
-│   ├── seed.py
-│   └── tensor_logging.py
-├── .gitattributes
-├── .gitignore
-├── CITATION.cff
-├── config.py
-├── config_loader.py
-├── dataset.py
-├── evaluate.py
-├── losses.py
-├── metrics.py
-├── pipeline.py
-├── protocol.py
-├── protocol_integrity.py
-├── run_experiment.py
-├── train.py
-├── pyproject.toml
-├── requirements.txt
-└── README.md
-```
-
-The main components are organized as follows:
-
-- `configs/mtam_hg.yaml`: configuration for the main MTAM-HG experiment.
-- `run_experiment.py`: entry point for the ten-run main experiment, with separate output directories for each run.
-- `generation/`: MP-TabDiff data preparation, training, sampling, and mechanism-based postprocessing.
-- `models/`: heterogeneous graph construction, IPOHGN experts, mixture-of-experts routing, and MR-LoRA adaptation.
-- `training/`: CBTG-Agent regulation, working-condition clustering, synthetic pretraining, and supporting training routines.
-- `dataset.py`: data loading, partitioning, and preprocessing.
-- `pipeline.py`, `train.py`, and `evaluate.py`: workflow orchestration, model training, and prediction evaluation.
-- `config.py`, `config_loader.py`, and `protocol.py`: model settings, configuration loading, and experiment protocol definitions.
-- `losses.py` and `metrics.py`: training objectives and regression evaluation metrics.
-- `protocol_integrity.py`: data-partition and synthetic-data provenance validation.
-- `utils/`: graph utilities, random-seed initialization, and logging.
-- `third_party/TabDiff/`: adapted TabDiff implementation with its original license.
----
-
-## 📦 Outputs
-
-Experiment outputs are written under:
-
-```text
-outputs/
-```
-
-Each independent run stores the corresponding:
-
-* model checkpoints.
-* prediction results.
-* evaluation metrics.
-* expert-routing statistics.
-* CBTG-Agent sample-selection records.
-* training logs.
-* preprocessing and experiment metadata.
-
-With the default configuration, the main experiment outputs are organized as follows (representative files shown):
-
-```text
-outputs/mtam_hg/
-└── <experiment_timestamp>/
-    ├── seed_42/
-    │   └── <run_timestamp>/
-    │       ├── checkpoints/
-    │       │   └── best_model.pth
-    │       ├── logs/
-    │       │   └── train_log.csv
-    │       └── results/
-    │           ├── metrics.json
-    │           ├── predictions.csv
-    │           └── ...
-    ├── seed_43/
-    │   └── ...
-    └── ...
-```
-
----
-
 ## 📏 Evaluation Metrics
 
 Yield strength prediction is evaluated using four regression metrics:
@@ -349,7 +195,6 @@ Lower RMSE, MAE, and MAPE values indicate smaller prediction errors, while a hig
 * **July 2026** — Manuscript completed and submitted.
 * **August 2026** — Source code released.
 
-
 ---
 
 ## 🙏 Acknowledgements
@@ -357,12 +202,6 @@ Lower RMSE, MAE, and MAPE values indicate smaller prediction errors, while a hig
 This project builds upon **PyTorch**, **scikit-learn**, and the open-source **TabDiff** implementation.
 
 We thank the open-source community for the tools and resources that support research in tabular diffusion modeling, heterogeneous graph learning, mixture-of-experts architectures, and parameter-efficient adaptation.
-
-The original TabDiff copyright and license are provided in:
-
-```text
-third_party/TabDiff/LICENSE
-```
 
 ---
 
