@@ -30,7 +30,6 @@ from protocol import (
     DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_WEIGHT,
     DEFAULT_DYNAMIC_SYNTHETIC_TOP_RATIO,
     DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REGION_WEIGHT,
-    DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC,
     DEFAULT_DYNAMIC_SYNTHETIC_USE_LOSS_WEIGHT,
     DEFAULT_DYNAMIC_SYNTHETIC_USE_SAMPLER,
     DEFAULT_DYNAMIC_SYNTHETIC_WARMUP_EPOCHS,
@@ -64,7 +63,6 @@ from protocol import (
     DEFAULT_SYNTHETIC_AGENT_EPOCHS,
     DEFAULT_SYNTHETIC_AGENT_HIDDEN_DIM,
     DEFAULT_SYNTHETIC_AGENT_LR,
-    DEFAULT_SYNTHETIC_CONFIDENCE_THRESHOLD,
     DEFAULT_SYNTHETIC_DATA_PATH,
     DEFAULT_SYNTHETIC_PRETRAIN_EPOCHS,
     DEFAULT_TABDIFF_NUM_SAMPLES,
@@ -105,8 +103,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dropout", type=float, default=DEFAULT_DROPOUT)
     parser.add_argument("--agent_dropout", type=float, default=DEFAULT_DROPOUT)
     parser.add_argument("--synthetic_agent_dropout", type=float, default=DEFAULT_DROPOUT)
-    parser.add_argument("--synthetic_confidence_threshold", type=float, default=DEFAULT_SYNTHETIC_CONFIDENCE_THRESHOLD)
-    parser.add_argument("--synthetic_pretrain_confidence_threshold", type=float, default=0.0)
     parser.add_argument("--use_dynamic_synthetic_agent", action="store_true", default=DEFAULT_USE_DYNAMIC_SYNTHETIC_AGENT)
     parser.add_argument("--no_dynamic_synthetic_agent", dest="use_dynamic_synthetic_agent", action="store_false")
     parser.add_argument("--dynamic_synthetic_refresh_epochs", type=int, default=DEFAULT_DYNAMIC_SYNTHETIC_REFRESH_EPOCHS)
@@ -128,7 +124,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dynamic_synthetic_scarcity_bins", type=int, default=DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_BINS)
     parser.add_argument("--dynamic_synthetic_process_power", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_PROCESS_POWER)
     parser.add_argument("--dynamic_synthetic_mechanism_power", type=float, default=DEFAULT_DYNAMIC_SYNTHETIC_MECHANISM_POWER)
-    parser.add_argument("--dynamic_synthetic_train_reward_metric", choices=["rmse", "mae"], default=DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC)
     parser.add_argument("--use_cluster_balance_reward", action="store_true", default=DEFAULT_USE_CLUSTER_BALANCE_REWARD)
     parser.add_argument("--no_cluster_balance_reward", dest="use_cluster_balance_reward", action="store_false")
     parser.add_argument("--num_working_condition_clusters", type=int, default=DEFAULT_NUM_WORKING_CONDITION_CLUSTERS)
@@ -255,8 +250,6 @@ def validate_args(args: argparse.Namespace) -> None:
         if value is not None and float(value) <= 0:
             raise ValueError(f"--{name} must be positive, got {value}.")
     bounded = {
-        "synthetic_confidence_threshold": args.synthetic_confidence_threshold,
-        "synthetic_pretrain_confidence_threshold": args.synthetic_pretrain_confidence_threshold,
         "dynamic_synthetic_top_ratio": args.dynamic_synthetic_top_ratio,
         "dynamic_synthetic_weight_min": args.dynamic_synthetic_weight_min,
         "dynamic_synthetic_ema": args.dynamic_synthetic_ema,

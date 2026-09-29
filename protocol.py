@@ -33,7 +33,6 @@ DEFAULT_WEIGHT_DECAY = config.WEIGHT_DECAY
 DEFAULT_DROPOUT = config.DROPOUT
 DEFAULT_EARLY_STOPPING_PATIENCE = config.EARLY_STOPPING_PATIENCE
 
-DEFAULT_SYNTHETIC_CONFIDENCE_THRESHOLD = config.SYNTHETIC_CONFIDENCE_THRESHOLD
 DEFAULT_USE_DYNAMIC_SYNTHETIC_AGENT = config.USE_DYNAMIC_SYNTHETIC_AGENT
 DEFAULT_DYNAMIC_SYNTHETIC_REFRESH_EPOCHS = config.DYNAMIC_SYNTHETIC_REFRESH_EPOCHS
 DEFAULT_DYNAMIC_SYNTHETIC_WARMUP_EPOCHS = config.DYNAMIC_SYNTHETIC_WARMUP_EPOCHS
@@ -54,7 +53,6 @@ DEFAULT_DYNAMIC_SYNTHETIC_RELIABILITY_FLOOR = config.DYNAMIC_SYNTHETIC_RELIABILI
 DEFAULT_DYNAMIC_SYNTHETIC_SCARCITY_BINS = config.DYNAMIC_SYNTHETIC_SCARCITY_BINS
 DEFAULT_DYNAMIC_SYNTHETIC_PROCESS_POWER = config.DYNAMIC_SYNTHETIC_PROCESS_POWER
 DEFAULT_DYNAMIC_SYNTHETIC_MECHANISM_POWER = config.DYNAMIC_SYNTHETIC_MECHANISM_POWER
-DEFAULT_DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC = config.DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC
 
 DEFAULT_USE_CLUSTER_BALANCE_REWARD = config.USE_CLUSTER_BALANCE_REWARD
 DEFAULT_NUM_WORKING_CONDITION_CLUSTERS = config.NUM_WORKING_CONDITION_CLUSTERS
@@ -109,7 +107,6 @@ DYNAMIC_SYNTHETIC_RUNNER_ARG_SPECS = [
     ("dynamic_synthetic_scarcity_bins", "--dynamic_synthetic_scarcity_bins"),
     ("dynamic_synthetic_process_power", "--dynamic_synthetic_process_power"),
     ("dynamic_synthetic_mechanism_power", "--dynamic_synthetic_mechanism_power"),
-    ("dynamic_synthetic_train_reward_metric", "--dynamic_synthetic_train_reward_metric"),
 ]
 
 CLUSTER_BALANCE_ARG_SPECS = [
@@ -128,8 +125,6 @@ MAIN_TRAIN_ARG_SPECS = [
     ("synthetic_agent_attention_dim", "--synthetic_agent_attention_dim"),
     ("synthetic_agent_attention_heads", "--synthetic_agent_attention_heads"),
     ("synthetic_agent_dropout", "--synthetic_agent_dropout"),
-    ("synthetic_confidence_threshold", "--synthetic_confidence_threshold"),
-    ("synthetic_pretrain_confidence_threshold", "--synthetic_pretrain_confidence_threshold"),
     *DYNAMIC_SYNTHETIC_RUNNER_ARG_SPECS,
     ("dynamic_synthetic_real_feedback_weight", "--dynamic_synthetic_real_feedback_weight"),
     ("dynamic_synthetic_quota_strength", "--dynamic_synthetic_quota_strength"),

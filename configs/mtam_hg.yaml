@@ -36,7 +36,6 @@ synthetic_agent_attention_heads: 4
 synthetic_agent_dropout: 0.2
 synthetic_agent_epochs: 20
 synthetic_agent_lr: 0.001
-synthetic_pretrain_confidence_threshold: 0.0
 use_dynamic_synthetic_agent: true
 dynamic_synthetic_refresh_epochs: 5
 dynamic_synthetic_warmup_epochs: 0

@@ -133,8 +133,10 @@ class ReliabilityAwareRouter(nn.Module):
         )
         self.routing_head = nn.Linear(hidden_dim, num_experts)
         self.confidence_head = nn.Sequential(nn.Linear(hidden_dim, 1), nn.Sigmoid())
-        self.synthetic_keep_head = nn.Sequential(nn.Linear(hidden_dim, 1), nn.Sigmoid())
-        self.training_weight_head = nn.Sequential(nn.Linear(hidden_dim, 1), nn.Sigmoid())
+        # Keep the public output names for downstream diagnostics, but use one
+        # canonical sample-quality signal instead of three independent heads.
+        self.synthetic_keep_head = self.confidence_head
+        self.training_weight_head = self.confidence_head
         self.expert_reliability_head = nn.Sequential(nn.Linear(hidden_dim, num_experts), nn.Sigmoid())
         self.uncertainty_reason_head = nn.Sequential(nn.Linear(hidden_dim, self.reason_dim), nn.Sigmoid())
 
@@ -180,8 +182,9 @@ class ReliabilityAwareRouter(nn.Module):
                 device=global_hidden.device,
                 dtype=global_hidden.dtype,
             )
-        synthetic_keep_score = self.synthetic_keep_head(encoded)
-        training_weight = self.training_weight_head(encoded)
+        # The confidence head is the canonical sample-quality signal.
+        synthetic_keep_score = sample_confidence
+        training_weight = sample_confidence
         uncertainty_reason_vector = self.uncertainty_reason_head(encoded)
         entropy = -(gate_probs * torch.log(gate_probs + 1.0e-8)).sum(dim=-1)
         return {

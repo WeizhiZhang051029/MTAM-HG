@@ -74,14 +74,11 @@ _YAML_CONFIG_MAPPING = {key: key.upper() for key in """
     synthetic_label_col synthetic_pretrain_epochs synthetic_batch_size
     synthetic_use_agent_weight synthetic_use_reward_loss synthetic_agent_hidden_dim
     synthetic_agent_attention_dim synthetic_agent_attention_heads synthetic_agent_dropout
-    synthetic_agent_epochs synthetic_agent_lr synthetic_confidence_threshold
-    synthetic_pretrain_confidence_threshold synthetic_save_diagnostics
-    synthetic_use_process_consistency synthetic_process_consistency_threshold
+    synthetic_agent_epochs synthetic_agent_lr
     synthetic_process_range_quantile_low synthetic_process_range_quantile_high
     synthetic_process_range_margin synthetic_process_knn_k synthetic_process_range_weight
     synthetic_process_manifold_weight synthetic_process_label_weight
-    synthetic_process_score_power synthetic_use_mechanism_consistency
-    synthetic_mechanism_score_power synthetic_reward_mse_weight
+    synthetic_reward_mse_weight
     synthetic_reward_process_weight synthetic_reward_mechanism_weight
     use_dynamic_synthetic_agent dynamic_synthetic_refresh_epochs
     dynamic_synthetic_warmup_epochs dynamic_synthetic_use_sampler
@@ -92,7 +89,6 @@ _YAML_CONFIG_MAPPING = {key: key.upper() for key in """
     dynamic_synthetic_quota_strength dynamic_synthetic_quota_min dynamic_synthetic_quota_max
     dynamic_synthetic_reliability_floor dynamic_synthetic_scarcity_bins
     dynamic_synthetic_process_power dynamic_synthetic_mechanism_power
-    dynamic_synthetic_train_reward_metric
     use_layerwise_finetune_lr finetune_backbone_lr finetune_head_lr finetune_agent_lr
     finetune_quality_agent_lr freeze_finetune_backbone finetune_trainable_keywords
     use_mr_lora mr_lora_scope mr_lora_rank_graph mr_lora_rank_routing mr_lora_alpha_graph
@@ -191,7 +187,6 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
         set_output_dir(args.output_dir)
     if args.label_col:
         config.LABEL_COL = args.label_col
-        config.LABEL_COL = args.label_col
 
     value_overrides = {
         "data_path": "DATA_PATH",
@@ -222,13 +217,8 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
         "synthetic_agent_lr": "SYNTHETIC_AGENT_LR",
         "scientific_code_sha256": "EXPECTED_SCIENTIFIC_CODE_SHA256",
         "generation_protocol_sha256": "EXPECTED_GENERATION_PROTOCOL_SHA256",
-        "synthetic_confidence_threshold": "SYNTHETIC_CONFIDENCE_THRESHOLD",
-        "synthetic_pretrain_confidence_threshold": "SYNTHETIC_PRETRAIN_CONFIDENCE_THRESHOLD",
-        "synthetic_process_consistency_threshold": "SYNTHETIC_PROCESS_CONSISTENCY_THRESHOLD",
         "synthetic_process_range_margin": "SYNTHETIC_PROCESS_RANGE_MARGIN",
         "synthetic_process_knn_k": "SYNTHETIC_PROCESS_KNN_K",
-        "synthetic_process_score_power": "SYNTHETIC_PROCESS_SCORE_POWER",
-        "synthetic_mechanism_score_power": "SYNTHETIC_MECHANISM_SCORE_POWER",
         "synthetic_reward_mse_weight": "SYNTHETIC_REWARD_MSE_WEIGHT",
         "synthetic_reward_process_weight": "SYNTHETIC_REWARD_PROCESS_WEIGHT",
         "synthetic_reward_mechanism_weight": "SYNTHETIC_REWARD_MECHANISM_WEIGHT",
@@ -252,7 +242,6 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
         "dynamic_synthetic_scarcity_bins": "DYNAMIC_SYNTHETIC_SCARCITY_BINS",
         "dynamic_synthetic_process_power": "DYNAMIC_SYNTHETIC_PROCESS_POWER",
         "dynamic_synthetic_mechanism_power": "DYNAMIC_SYNTHETIC_MECHANISM_POWER",
-        "dynamic_synthetic_train_reward_metric": "DYNAMIC_SYNTHETIC_TRAIN_REWARD_METRIC",
         "tabdiff_num_samples": "TABDIFF_NUM_SAMPLES",
         "tabdiff_gpu": "TABDIFF_GPU",
         "tabdiff_mechanism_constraint": "TABDIFF_MECHANISM_CONSTRAINT",
@@ -304,7 +293,6 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
         "agent_use_sample_weight_for_supervised_loss": "AGENT_USE_SAMPLE_WEIGHT_FOR_SUPERVISED_LOSS",
         "use_agent_reward": "USE_AGENT_REWARD",
         "use_confidence_weighted_supervised_loss": "USE_CONFIDENCE_WEIGHTED_SUPERVISED_LOSS",
-        "use_synthetic_process_consistency": "SYNTHETIC_USE_PROCESS_CONSISTENCY",
         "use_layerwise_finetune_lr": "USE_LAYERWISE_FINETUNE_LR",
         "use_mr_lora": "USE_MR_LORA",
         "mr_lora_train_output_head": "MR_LORA_TRAIN_OUTPUT_HEAD",
@@ -316,8 +304,6 @@ def apply_cli_overrides(args: argparse.Namespace) -> None:
 
     if args.no_agent_reward:
         _set_mapped_config("USE_AGENT_REWARD", False)
-    if args.no_synthetic_process_consistency:
-        _set_mapped_config("SYNTHETIC_USE_PROCESS_CONSISTENCY", False)
     if args.no_layerwise_finetune_lr:
         _set_mapped_config("USE_LAYERWISE_FINETUNE_LR", False)
     if args.no_mr_lora:
@@ -393,13 +379,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--synthetic_agent_lr", type=float, default=None)
     parser.add_argument("--scientific_code_sha256", default="")
     parser.add_argument("--generation_protocol_sha256", default="")
-    parser.add_argument("--synthetic_confidence_threshold", type=float, default=None)
-    parser.add_argument("--synthetic_pretrain_confidence_threshold", type=float, default=None)
-    parser.add_argument("--synthetic_process_consistency_threshold", type=float, default=None)
     parser.add_argument("--synthetic_process_range_margin", type=float, default=None)
     parser.add_argument("--synthetic_process_knn_k", type=int, default=None)
-    parser.add_argument("--synthetic_process_score_power", type=float, default=None)
-    parser.add_argument("--synthetic_mechanism_score_power", type=float, default=None)
     parser.add_argument("--synthetic_reward_mse_weight", type=float, default=None)
     parser.add_argument("--synthetic_reward_process_weight", type=float, default=None)
     parser.add_argument("--synthetic_reward_mechanism_weight", type=float, default=None)
@@ -424,7 +405,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dynamic_synthetic_scarcity_bins", type=int, default=None)
     parser.add_argument("--dynamic_synthetic_process_power", type=float, default=None)
     parser.add_argument("--dynamic_synthetic_mechanism_power", type=float, default=None)
-    parser.add_argument("--dynamic_synthetic_train_reward_metric", choices=["", "rmse", "mae"], default="")
     parser.add_argument("--use_cluster_balance_reward", action="store_true")
     parser.add_argument("--no_cluster_balance_reward", action="store_true")
     parser.add_argument("--num_working_condition_clusters", type=int, default=None)
@@ -452,10 +432,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mr_lora_train_output_head", action="store_true")
     parser.add_argument("--no_mr_lora_train_output_head", action="store_true")
     parser.add_argument("--checkpoint_selection_metric", choices=["rmse"], default=None)
-    parser.add_argument("--use_synthetic_process_consistency", action="store_true")
     parser.add_argument("--use_layerwise_finetune_lr", action="store_true")
     parser.add_argument("--no_layerwise_finetune_lr", action="store_true")
-    parser.add_argument("--no_synthetic_process_consistency", action="store_true")
     parser.add_argument("--tabdiff_num_samples", type=int, default=None)
     parser.add_argument("--tabdiff_gpu", type=int, default=None)
     parser.add_argument("--use_confidence_weighted_supervised_loss", action="store_true")
