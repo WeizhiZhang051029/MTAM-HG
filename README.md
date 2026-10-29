@@ -190,6 +190,8 @@ Lower RMSE, MAE, and MAPE values indicate smaller prediction errors, while a hig
 * **July 2026** — MTAM-HG framework completed.
 * **July 2026** — Manuscript completed and submitted.
 * **August 2026** — Source code released.
+* **October 2026** — Manuscript accepted.
+* **October 2026** — Paper published online.
 
 ---
 
@@ -206,10 +208,13 @@ We thank the open-source community for the tools and resources that support rese
 If you find this repository useful in your research, please consider citing our paper:
 
 ```bibtex
-@article{zhang2026mtamhg,
-  title   = {MTAM-HG: A Mixture-of-Experts Heterogeneous Graph Network with Agent-Regulated Diffusion Augmentation for Strip Yield Strength Prediction},
-  journal = {Expert Systems with Applications},
-  year    = {2026},
+@article{zhang2026mtam,
+  title={MTAM-HG: A Mixture-of-Experts Heterogeneous Graph Network with Agent-Regulated Diffusion Augmentation for Strip Yield Strength Prediction},
+  author={Zhang, Weizhi and Li, Yiteng and Xie, Yuhan and Zhang, Jingchuan and Pan, Jianfei and Wang, Xinran and Wang, Xianpeng},
+  journal={Expert Systems with Applications},
+  pages={134785},
+  year={2026},
+  publisher={Elsevier}
 }
 ```
 
